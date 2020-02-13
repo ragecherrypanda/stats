@@ -11,7 +11,6 @@
 %%%-----------------------------------------------------------------------------
 -module(stats_persist).
 -include("stats.hrl").
--include_lib("cluster_metadata/include/cluster_metadata.hrl").
 
 -export([enabled/0, reload_metadata/0, find_entries/3,
     put/3, put/4, get/2, get/3, get_all/1, get_all_stats/0, delete/2,
@@ -25,6 +24,10 @@
                                   options => [],
                                   aliases => []}).
 
+-type persist_prefix()     :: {binary() | atom(), binary() | atom()}.
+-type persist_key()        :: any().
+-type persist_prefix_key() :: {persist_prefix(), persist_key()}.
+
 %%%=============================================================================
 %%% Main API
 %%%=============================================================================
@@ -33,7 +36,7 @@
 %%%-----------------------------------------------------------------------------
 -spec(enabled() -> true | false).
 enabled() ->
-    app_helper:get_env(?APP,?METADATA_ENV,true).
+    app_helper:get_env(?PERSIST_APP, ?PERSIST_ENV, true).
 
 %%%-----------------------------------------------------------------------------
 %% @doc
@@ -41,10 +44,10 @@ enabled() ->
 %% configuration of status status' in exometer_core
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(reload_metadata() -> ok | error()).
+-spec(reload_metadata() -> no_return()).
 reload_metadata() ->
     Stats = stats_manager:find_entries([[riak]],'_'),
-    change_status([{Stat,Status} || {Stat,_Type,Status} <- Stats]).
+    change_status([{Stat, Status} || {Stat, _Type, Status} <- Stats]).
 
 %%%-----------------------------------------------------------------------------
 %% @doc
@@ -52,20 +55,20 @@ reload_metadata() ->
 %% out the stats that match the STATUS and TYPE.
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(find_entries(metrics(),status(),type()) -> listofstats()).
+-spec(find_entries(metrics(),status(),type()) -> found_stats()).
 find_entries(Stats,Status,Type) ->
     %% This isn't what it looks like, it is not taking every single stat out,
     %% when the data is sanitised for "stat.**.name", it creates a list within
     %% a list such as: [[stat,'_',name],[stat,'_','_',name]...] for each one
     %% of these we need to do a fold. @see stats_console:sanitise_stat_input/1
-    lists:foldl(fun(S,Acc) -> [fold_stat(S,Status,Type)|Acc] end,[],Stats).
+    lists:foldl(fun(S,Acc) -> fold_stat(S, Status, Type) ++ Acc end,[], Stats).
 
 %%%-----------------------------------------------------------------------------
 %% @doc
 %% Pass the StatName into the fold, to match ({match,Stat}) the objects
 %% stored in the metadata, under the Prefix: @see :  ?STAT_PREFIX
 %%%-----------------------------------------------------------------------------
--spec(fold_stat(metricname(),status(),(type() | '_')) -> acc()).
+-spec(fold_stat(metrics(),status(),(type() | '_')) -> found_stats()).
 %%%-----------------------------------------------------------------------------
 %% Returns the same as exometer:find_entries ->
 %%          [{Name,Type,Status}|...]
@@ -88,7 +91,7 @@ fold_stat(Stat, Status0, Type0) ->
 %%%-----------------------------------------------------------------------------
 %% @doc Checks the metadata for the pkey provided @end
 %%%-----------------------------------------------------------------------------
--spec(check_meta(metricname() | metadata_pkey()) -> metadata_value()).
+-spec(check_meta(metricname() | prefix_key()) -> atom() | list()).
 check_meta(Stat) when is_list(Stat) ->
     check_meta(?STAT_KEY(Stat));
 check_meta({Prefix, Key}) ->
@@ -118,8 +121,7 @@ find_unregister_status(_)                         -> false.
 %%%-----------------------------------------------------------------------------
 %% @doc Put into the metadata @end
 %%%-----------------------------------------------------------------------------
--spec(put(metadata_prefix(), metadata_key(),
-    metadata_value() | metadata_modifier(), options()) -> ok).
+-spec(put(persist_prefix(), persist_key(), any(), options()) -> ok).
 put(Prefix, Key, Value) ->
     put(Prefix, Key, Value, []).
 put(Prefix, Key, Value, Opts) ->
@@ -128,8 +130,7 @@ put(Prefix, Key, Value, Opts) ->
 %%%-----------------------------------------------------------------------------
 %% @doc Pulls out information from cluster_metadata @end
 %%%-----------------------------------------------------------------------------
--spec(get(metadata_prefix(), metadata_key()) ->
-					metadata_value() | undefined).
+-spec(get(persist_prefix(), persist_key()) -> any() | undefined).
 get(Prefix, Key) ->
     get(Prefix, Key, []).
 get(Prefix, Key, Opts) ->
@@ -141,7 +142,7 @@ get(Prefix, Key, Opts) ->
 %% data stored under that prefix
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(get_all(metadata_prefix()) -> metadata_value()).
+-spec(get_all(persist_prefix()) -> any()).
 get_all(Prefix) ->
     cluster_metadata:to_list(Prefix).
 
@@ -151,7 +152,7 @@ get_all_stats() ->
 %%%-----------------------------------------------------------------------------
 %% @doc deleting the key from the metadata replaces values with tombstone @end
 %%%-----------------------------------------------------------------------------
--spec(delete(metadata_prefix(), metadata_key()) -> ok).
+-spec(delete(persist_prefix(), persist_key()) -> ok).
 delete(Prefix, Key) ->
     cluster_metadata:delete(Prefix, Key).
 
@@ -165,7 +166,7 @@ delete(Prefix, Key) ->
 %% it, and pulls out the options and sends it back to go into exometer_core
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(register(tuple_stat()) -> [] | no_return()).
+-spec(register(metricname(),type(),options(),aliases()) -> [] | no_return()).
 register({StatName, Type, Opts, Aliases}) ->
     register(StatName, Type, Opts, Aliases).
 register(StatName, Type, Opts, Aliases) ->
@@ -192,7 +193,7 @@ register(StatName, Type, Opts, Aliases) ->
             []
     end.
 
--spec(re_register(metricname(), (tuple_stat() | stat_map())) -> ok).
+-spec(re_register(metricname(), tuple_stat()) -> ok).
 re_register(StatName,{Status,Type,Options,Aliases}) ->
     StatMap = ?STAT_MAP,
     Value = StatMap#{status => Status,
@@ -206,7 +207,7 @@ re_register(StatName, Value) ->
 %%%-----------------------------------------------------------------------------
 %% @doc Changes the status of stats in the metadata @end
 %%%-----------------------------------------------------------------------------
--spec(change_status(metricname(), status()) -> ok | acc()).
+-spec(change_status(metricname(), status()) -> [] | {metricname(),status()}).
 change_status({StatName, Status}) -> change_status(StatName, Status);
 change_status(Stats) ->
     [change_status(Stat, Status) || {Stat, Status} <- Stats].
@@ -215,14 +216,14 @@ change_status(Statname, ToStatus) ->
         []           -> []; %% doesn't exist
         unregistered -> []; %% unregistered
         MapValue ->
-            put(?STAT_PREFIX,Statname,MapValue#{status=>ToStatus}),
-            {Statname,ToStatus}
+            put(?STAT_PREFIX, Statname, MapValue#{status => ToStatus}),
+            {Statname, ToStatus}
     end.
 
 %%%-----------------------------------------------------------------------------
 %% @doc Setting the options in the metadata @end
 %%%-----------------------------------------------------------------------------
--spec(set_options(metricname() | metadata_key(), options()) -> ok).
+-spec(set_options(metricname() | persist_key(), options()) -> ok | no_return()).
 set_options(StatInfo, NewOpts) when is_list(NewOpts) ->
     lists:foreach(fun({Key, NewVal}) ->
         set_options(StatInfo, {Key, NewVal})
@@ -245,6 +246,6 @@ unregister(Statname) ->
     case check_meta(?STAT_KEY(Statname)) of
         MapValue = #{status := Status} when Status =/= unregistered ->
             %% Stat exists, re-register with unregistered - "status"
-            put(Statname,MapValue#{status=>unregistered});
+            put(Statname,MapValue#{status => unregistered});
         _ -> ok
     end.
