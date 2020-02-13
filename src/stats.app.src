@@ -1,0 +1,27 @@
+%% -*- tab-width: 4;erlang-indent-level: 4;indent-tabs-mode: nil -*-
+%% ex: ts=4 sw=4 et
+{application, stats,
+    [
+        {description, "Stats logging and persistence OTP 20"},
+        {vsn, git},
+        {registered, []},
+        {applications, [
+                        kernel,
+                        stdlib,
+                        lager,
+                        cluster_metadata,
+                        exometer_core,
+                        webmachine
+                        ]},
+        {mod, {stats, []}},
+        {env,
+            [{exometer_defaults,
+                [{['_'], histogram,
+                    [{options,
+                        [{histogram_module, exometer_slot_slide},
+                         {keep_high, 500}
+                        ]}
+                    ]}
+                ]}
+            ]}
+        ]}.
