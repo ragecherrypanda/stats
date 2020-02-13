@@ -16,13 +16,16 @@
     put/3, put/4, get/2, get/3, get_all/1, get_all_stats/0, delete/2,
     register/1, change_status/1, set_options/2, unregister/1]).
 
--define(STAT,                  stats).
+-define(STAT,                   stats).
 -define(STAT_PREFIX,           {?STAT, node()}).
--define(STAT_KEY(StatName),     {?STAT_PREFIX, StatName}).
+-define(STAT_KEY(StatName),    {?STAT_PREFIX, StatName}).
 -define(STAT_MAP,               #{status  => enabled,
                                   type    => undefined,
                                   options => [],
                                   aliases => []}).
+
+-define(PERSIST_APP,          cluster_metadata).
+-define(PERSIST_ENV,          metadata_enabled).
 
 -type persist_prefix()     :: {binary() | atom(), binary() | atom()}.
 -type persist_key()        :: any().
