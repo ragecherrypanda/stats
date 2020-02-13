@@ -24,9 +24,6 @@
                                   options => [],
                                   aliases => []}).
 
--define(PERSIST_APP,          cluster_metadata).
--define(PERSIST_ENV,          metadata_enabled).
-
 -type persist_prefix()     :: {binary() | atom(), binary() | atom()}.
 -type persist_key()        :: any().
 -type persist_prefix_key() :: {persist_prefix(), persist_key()}.
@@ -49,7 +46,7 @@ enabled() ->
 %%%-----------------------------------------------------------------------------
 -spec(reload_metadata() -> no_return()).
 reload_metadata() ->
-    Stats = stats_manager:find_entries([[riak]],'_'),
+    Stats = stats:find_entries([[riak]],'_'),
     change_status([{Stat, Status} || {Stat, _Type, Status} <- Stats]).
 
 %%%-----------------------------------------------------------------------------
@@ -94,7 +91,7 @@ fold_stat(Stat, Status0, Type0) ->
 %%%-----------------------------------------------------------------------------
 %% @doc Checks the metadata for the pkey provided @end
 %%%-----------------------------------------------------------------------------
--spec(check_meta(metricname() | prefix_key()) -> atom() | list()).
+-spec(check_meta(metricname() | persist_prefix_key()) -> atom() | list()).
 check_meta(Stat) when is_list(Stat) ->
     check_meta(?STAT_KEY(Stat));
 check_meta({Prefix, Key}) ->
@@ -244,7 +241,7 @@ set_options(StatName, {Status, Type, NewOpts, Aliases}) ->
 %% registers the stats it will be ignored
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(unregister(metadata_key()) -> ok).
+-spec(unregister(persist_key()) -> ok).
 unregister(Statname) ->
     case check_meta(?STAT_KEY(Statname)) of
         MapValue = #{status := Status} when Status =/= unregistered ->
