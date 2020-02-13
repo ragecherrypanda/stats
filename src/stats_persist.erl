@@ -215,8 +215,8 @@ change_status(Statname, ToStatus) ->
         []           -> []; %% doesn't exist
         unregistered -> []; %% unregistered
         MapValue ->
-            put(?STAT_PREFIX,Statname,MapValue#{status=>ToStatus})
-%%            {Statname,ToStatus} %% todo : why is this here?
+            put(?STAT_PREFIX,Statname,MapValue#{status=>ToStatus}),
+            {Statname,ToStatus}
     end.
 
 %%%-----------------------------------------------------------------------------
