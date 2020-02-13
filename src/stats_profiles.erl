@@ -112,7 +112,7 @@ load_profile(ProfileName,Nodes) ->
                 %% delete stats that are already enabled/disabled, any
                 %% duplicates with different statuses will be replaced
                 %% with the profile one
-                stats_manager:change_status(ToChange),
+                stats:change_status(ToChange),
                 lists:foreach(fun(Node) ->
                     stats_persist:put(?LOADED_PREFIX, Node, ProfileName)
                               end, Nodes)
@@ -180,7 +180,7 @@ reset_profile(Nodes) ->
 
     %% get all the stats that are disabled and re-enable them
     CurrentStats = stats_persist:get_all_stats(),
-    stats_manager:change_status(
+    stats:change_status(
         [{Stat,enabled} || {Stat,Status} <- CurrentStats, Status =/= enabled]),
     {ok, Profiles}.
 
