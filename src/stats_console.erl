@@ -1,44 +1,27 @@
 %%%-----------------------------------------------------------------------------
-%%% @doc Handle console input @end
+%%% @doc Handle console input for stats, profiles and push configuration @end
 %%%-----------------------------------------------------------------------------
 -module(stats_console).
 -include("stats.hrl").
+-include("stats_push.hrl").
 
 -export([
     %% Stat API Exports
-    show_stat/1,
-    stat_info/1,
-    stat_enable/1,
-    stat_disable/1,
-    status_change/2,
-    reset_stat/1,
-    stat_metadata/1,
-        sanitise_stat_input/1,
-        sanitise_stat_input/2,
-        sanitise_stat_input/3,
+    show_stat/1, stat_info/1, stat_enable/1, stat_disable/1, status_change/2,
+    reset_stat/1, stat_metadata/1,
+        sanitise_stat_input/1, sanitise_stat_input/2, sanitise_stat_input/3,
 
     %% Profile API Exports
-    save_profile/1,
-    load_profile/1,
-    load_profile_all/1,
-    delete_profile/1,
-    reset_profile/0,
-    reset_profile_all/0,
+    save_profile/1, load_profile/1, load_profile_all/1, delete_profile/1,
+    reset_profile/0, reset_profile_all/0,
 
     %% Push API Exports
-    setup/1,
-        store_setup_info/3,
-    setdown/1,
-    find_push_stats/1,
-    find_push_stats/2,
-    find_push_stats_all/1,
-        sanitise_push_input/1,
+    setup/1, setdown/1,
+    find_push_stats/1, find_push_stats/2, find_push_stats_all/1,
+        sanitise_push_input/1, store_setup_info/3,
 
     %% Other API
-        print/1,
-        print/2,
-
-    fold_through_meta/3]).
+    print/1, print/2, fold_through_meta/3]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Stats Functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -46,30 +29,30 @@
 %%%-----------------------------------------------------------------------------
 %% @doc
 %% Show enabled or disabled stats when using :
-%%      "stats show <entry/stat/app>.**"
+%%      "stats show <entry>.**"
 %% enabled stats will show by default
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(show_stat(consolearg()) -> print()).
+-spec(show_stat(console_arg()) -> no_return()).
 show_stat(Arg) ->
     print(find_entries(sanitise_stat_input(Arg))).
 
 %%%-----------------------------------------------------------------------------
 %% @doc Returns all the stats information @end
 %%%-----------------------------------------------------------------------------
--spec(stat_info(consolearg()) -> print()).
+-spec(stat_info(console_arg()) -> no_return()).
 stat_info(Arg) ->
     {Attrs, RestArg} = pick_info_attrs(Arg),
     {Stat,Type,Status,_DPS} = sanitise_stat_input(RestArg),
     print(find_entries({Stat,Type,Status,Attrs})).
 
--spec(pick_info_attrs(consolearg()) -> {attributes(), consolearg()}).
+-spec(pick_info_attrs(console_arg()) -> {attributes(), console_arg()}).
 %% @doc get list of attrs to print @end
 pick_info_attrs(Arg) ->
     Fun = get_attr_fun(),
     case lists:foldr(Fun, {[], []}, split_arg(Arg)) of
         {[], Rest} ->          %% If no arguments given
-            {?INFOSTAT, Rest}; %% use all, and return arg
+            {?INFO_STAT, Rest}; %% use all, and return arg
         Other ->
             Other
     end.
@@ -93,13 +76,13 @@ split_arg(Str) ->
 %%%-----------------------------------------------------------------------------
 %% @doc enable the stats, if the stat is already enabled does nothing @end
 %%%-----------------------------------------------------------------------------
--spec(stat_enable(consolearg()) -> print()).
+-spec(stat_enable(console_arg()) -> no_return()).
 stat_enable(Arg) -> print(status_change(Arg, enabled)).
 
 %%%-----------------------------------------------------------------------------
 %% @doc disable the stats - if already disabled does nothing @end
 %%%-----------------------------------------------------------------------------
--spec(stat_disable(consolearg()) -> print()).
+-spec(stat_disable(console_arg()) -> no_return()).
 stat_disable(Arg) -> print(status_change(Arg, disabled)).
 
 %%%-----------------------------------------------------------------------------
@@ -108,20 +91,19 @@ stat_disable(Arg) -> print(status_change(Arg, disabled)).
 %% enabled stats if the status(es) are to be disabled, and vice versa.
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(status_change(consolearg(), status()) -> listofstats()).
+-spec(status_change(console_arg(), status()) -> no_return()).
 status_change(Arg, ToStatus) ->
     {Entries,_DP} =
         case ToStatus of
             enabled  -> find_entries(sanitise_stat_input(Arg, '_', disabled));
             disabled -> find_entries(sanitise_stat_input(Arg, '_', enabled))
         end,
-    riak_core_stat_persist:change_status(
-        [{Stat, ToStatus} || {Stat,_,_} <- Entries]).
+    stats_persist:change_status([{Stat, ToStatus} || {Stat,_,_} <- Entries]).
 
 %%%-----------------------------------------------------------------------------
 %% @doc resets the stats in metadata and exometer @end
 %%%-----------------------------------------------------------------------------
--spec(reset_stat(consolearg()) -> ok).
+-spec(reset_stat(console_arg()) -> ok).
 reset_stat(Arg) ->
     {Found, _DPs} = find_entries(sanitise_stat_input(Arg)),
     lists:foreach(fun({N,_,_}) -> exometer:reset(N) end, Found).
@@ -136,28 +118,28 @@ reset_stat(Arg) ->
 %% before will not be loaded upon re-enabling to prevent errors
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(stat_metadata(Argument :: list() | atom()) -> print()).
+-spec(stat_metadata([string()]) -> ok).
 stat_metadata(["enable" ]) -> stat_metadata(enabled);
 stat_metadata(["disable"]) -> stat_metadata(disabled);
 stat_metadata(["status" ]) -> stat_metadata(status);
 stat_metadata(status) -> metadata_status();
 stat_metadata(Arg) when is_atom(Arg) ->
-    case Arg == riak_core_stat_persist:enabled() of
-        true -> metadata_status();
+    case Arg == stats_persist:enabled() of
+        true  -> metadata_status();
         false -> set_metadata(Arg)
     end.
 
 metadata_status() ->
-    print_response("Metadata is ~p~n",[riak_core_stat_persist:enabled()]).
+    print_response("Metadata is ~p~n",[stats_persist:enabled()]).
 
 set_metadata(enabled) ->
-    riak_core_stat_persist:reload_metadata(),
+    stats_persist:reload_metadata(),
     metadata_env(enabled);
 set_metadata(disabled) ->
     metadata_env(disabled).
 
 metadata_env(Status) ->
-    application:set_env(riak_core, ?METADATA_ENV, Status),
+    application:set_env(?PERSIST_APP, ?PERSIST_ENV, Status),
     metadata_status().
 
 %%%=============================================================================
@@ -173,7 +155,7 @@ metadata_env(Status) ->
 %%% they have been given.
 %%% @end
 %%%-----------------------------------------------------------------------------
--spec(sanitise_stat_input(consolearg()) -> sanitised_stat()).
+-spec(sanitise_stat_input(console_arg()) -> sanitised_stat()).
 sanitise_stat_input(Arg) ->
     parse_stat_entry(check_args(Arg), ?TYPE, ?STATUS, ?DPs).
 
@@ -191,9 +173,9 @@ sanitise_stat_input(Arg, Type, Status) ->
     parse_stat_entry(check_args(Arg), Type,  Status, ?DPs).
 
 %%%-----------------------------------------------------------------------------
-
 %% @doc make sure all Args are Binaries in a list: [<<Args>>]
 %% sanitised for parse_stat_entry @end
+%%%-----------------------------------------------------------------------------
 check_args([Args]) when is_atom(Args) ->
     check_args(atom_to_binary(Args, latin1));
 check_args([Args]) when is_list(Args) ->
@@ -216,8 +198,6 @@ check_args(Args) when is_binary(Args) ->
     [Args];
 check_args(_) ->
     print("Illegal Argument Type ~n"), [].
-
-%%%-----------------------------------------------------------------------------
 
 parse_stat_entry(BinArgs, Type, Status, DPs) ->
     [Bin | Args] = re:split(BinArgs, "/"), %% separate /type=*.. etc...
@@ -303,7 +283,7 @@ statname(Arg) when is_binary(Arg) ->
     Parts = re:split(Arg, "\\.", [{return,list}]),
     replace_parts(Parts);
 statname(_) ->
-    print("Illegal Argument Type in riak_stat_data:statname~n").
+    lager:error("Illegal Argument Type~n").
 
 ensure_trailing_dot(Str) ->
     case lists:reverse(Str) of
@@ -378,24 +358,22 @@ replace_part(H) ->
         _ -> list_to_atom(H)
     end.
 
-pads() ->
-    [lists:duplicate(N, '_') || N <- lists:seq(1,10)].
+pads() -> [lists:duplicate(N, '_') || N <- lists:seq(1,10)].
 
 %%%-----------------------------------------------------------------------------
 %% @doc
-%% Find_entries for the stat show/show-0/info, each one will use
-%% find_entries to print a stats information. specific for show-0 and
-%% different for info, stat show is the generic base in which it was
-%% created
+%% Find_entries for the stat show/show-0/info, each one will use find_entries to
+%% print a stats information. specific for show-0 and different for info, stat
+%% show is the generic base in which it was created
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(find_entries(sanitised_stat()|consolearg()) -> listofstats()).
+-spec(find_entries(sanitised_stat()|console_arg()) -> found_stats()).
 find_entries({Stat,Status,Type,DPs}) ->
     find_entries(Stat,Status,Type,DPs).
 find_entries(Stats,Status,Type,default) ->
     find_entries(Stats,Status,Type,[]);
 find_entries(Stats,Status,Type,DPs) ->
-    stats_manager:find_entries(Stats,Status,Type,DPs).
+    stats:find_entries(Stats,Status,Type,DPs).
 
 
 %%%-----------------------------------------------------------------------------
@@ -524,53 +502,46 @@ print_profile(Action,{ok,ProfileName}) ->
 print_profile(Action,{{error,Reason},ProfileName}) ->
     io:fwrite("Error, not ~s ~p -> because : ~p",[Action, ProfileName, Reason]).
 
-
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Push Functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%-----------------------------------------------------------------------------
 %%% @doc
-%%% From "riak stat push setup ___" to this module, you can poll the
-%%% stats from exometer and setup a server to push those stats to an
-%%% udp endpoint.
+%%% From "stats push setup ___" to this module, you can poll the stats from
+%%% exometer and setup a server to push those stats to an udp endpoint.
 %%% The server can be terminated to stop the pushing of stats.
 %%% @end
 %%%-----------------------------------------------------------------------------
 
--define(NEWMAP, #{
-    original_dt => calendar:universal_time(),
-    modified_dt => calendar:universal_time(),
-    pid => undefined,
-    running => true,
-    node => node(),
-    port => undefined,
-    server_ip => undefined,
-    stats => ['_']
-}).
+-define(NEW_MAP,#{original_dt => calendar:universal_time(),
+                  modified_dt => calendar:universal_time(),
+                  pid => undefined,
+                  running => true,
+                  node => node(),
+                  port => undefined,
+                  server_ip => undefined,
+                  stats => ['_']}).
 
--define(PUTMAP(Pid,Port,Server,Stats,Map),
-    Map#{pid => Pid,
-        port => Port,
-        server_ip => Server,
-        stats => Stats}).
--define(STARTMAP(Map),
-    Map#{modified_dt => calendar:universal_time(),
-        running => true}).
+-define(PUT_MAP(Pid,Port,Server,Stats,Map),Map#{pid => Pid,
+                                                port => Port,
+                                                server_ip => Server,
+                                                stats => Stats}).
+
+-define(STAT_MAP(Map), Map#{modified_dt => calendar:universal_time(),
+                            running => true}).
 
 %%%-----------------------------------------------------------------------------
 %% @doc
-%% the default operation of this function is to start up the pushing
-%% / polling of stats from exometer to the UDP/TCP endpoint.
-%% The ability to pass in an argument gives the added layer of
-%% functionality to choose the endpoint details quicker and easier,
+%% The default operation of this function is to start up the pushing / polling
+%% of stats from exometer to the UDP/TCP endpoint. The ability to pass in an
+%% argument gives the added layer of functionality to choose the endpoint
+%% details quicker and easier,
 %%
-%% If the server is already setup and polling stats, setting up
-%% another will start up another gen_server.
+%% If the server is already setup and polling stats, setting up another will
+%% start up another gen_server.
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(setup(consolearg()) -> print()).
+-spec(setup(console_arg()) -> no_return()).
 setup(ListofArgs) ->
     {Protocol, Data} = sanitise_push_input(ListofArgs),
     maybe_start_server(Protocol, Data).
@@ -578,14 +549,12 @@ setup(ListofArgs) ->
 host_port(HostPort) ->
     [Host|Port] = re:split(HostPort,"\\:",[{return,list}]),
     {Host,Port}.
-hostname([Host]) ->
-    hostname(Host);
-hostname(Host) ->
-    list_to_atom(Host).
-port([Port]) ->
-    port(Port);
-port(Port) ->
-    list_to_integer(Port).
+
+hostname([Host]) -> hostname(Host);
+hostname(Host) -> list_to_atom(Host).
+
+port([Port]) -> port(Port);
+port(Port) -> list_to_integer(Port).
 
 -spec(maybe_start_server(protocol(),sanitised_push()) -> ok | no_return()).
 maybe_start_server(Protocol, {{Port, Instance,Sip},'_'}) ->
@@ -594,7 +563,7 @@ maybe_start_server(Protocol, {{Port,Instance,Sip},Stats}) ->
     case fold_through_meta(Protocol,{{'_',Instance,'_'},'_'}, [node()]) of
         [] ->
             Pid = start_server(Protocol,{{Port,Instance,Sip},Stats}),
-            MapValue = ?PUTMAP(Pid,Port,Sip,Stats,?NEWMAP),
+            MapValue = ?PUT_MAP(Pid,Port,Sip,Stats,?NEW_MAP),
             store_setup_info({Protocol, Instance},MapValue,new);
         Servers ->
             maybe_start_server(Servers,Protocol,{{Port,Instance,Sip},Stats})
@@ -607,81 +576,75 @@ maybe_start_server(ServersFound,Protocol,{{Port,Instance,Sip},Stats}) ->
             ({{_Pr,_In}, #{running := false} = ExistingMap}) ->
                 Pid =
                     start_server(Protocol, {{Port, Instance, Sip}, Stats}),
-                MapValue = ?PUTMAP(Pid,Port,Sip,Stats,ExistingMap),
+                MapValue = ?PUT_MAP(Pid,Port,Sip,Stats,ExistingMap),
                 store_setup_info({Protocol, Instance}, MapValue, existing)
         end, ServersFound).
 
--spec(start_server(protocol(), sanitised_push()) -> print() | error()).
+-spec(start_server(protocol(), sanitised_push()) -> no_return()).
 start_server(Protocol, Arg) ->
-    riak_core_stat_push_sup:start_server(Protocol, Arg).
+    stats_push_sup:start_server(Protocol, Arg).
 
 -spec(store_setup_info(push_key(),push_value(), (new | existing))
-        -> ok | print() | error()).
+                                                     -> ok | print() | error()).
 store_setup_info({_Key,_Instance},
     #{pid := NotPid}, _Type) when is_pid(NotPid) == false -> ok;
 store_setup_info(Key, MapValues, new) ->
-    riak_core_stat_persist:put(?PUSH_PREFIX, Key, MapValues);
+    stats_persist:put(?PUSH_PREFIX, Key, MapValues);
 store_setup_info(Key, MapValues = #{running := _Bool}, existing) ->
-    NewMap = ?STARTMAP(MapValues),
-    riak_core_stat_persist:put(?PUSH_PREFIX, Key, NewMap).
-
+    NewMap = ?STAT_MAP(MapValues),
+    stats_persist:put(?PUSH_PREFIX, Key, NewMap).
 
 %%%-----------------------------------------------------------------------------
 %% @doc
-%% Kill the udp servers currently running and pushing stats to an
-%% endpoint. Stop the pushing of stats by taking the setup of the udp
-%% gen_server down
+%% Kill the udp servers currently running and pushing stats to an endpoint.
+%% Stop the pushing of stats by taking the setup of the udp gen_server down
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(setdown(consolearg()) -> print()).
-
+-spec(setdown(console_arg()) -> no_return()).
 setdown(ListofArgs) ->
     {Protocol, Data} = sanitise_push_input(ListofArgs),
     terminate_server(Protocol, Data).
 
 %% @doc change the undefined into
--spec(terminate_server(protocol(), sanitised_push()) -> ok | error()).
+-spec(terminate_server(protocol(), sanitised_push()) -> no_return()).
 terminate_server(Protocol, {{Port, Instance, Sip},Stats}) ->
     stop_server(fold(Protocol, Port, Instance, Sip, Stats, node())).
 
 stop_server(ChildrenInfo) ->
     lists:foreach(
-        fun
-            ({{Protocol, Instance},#{running := true} = MapValue}) ->
-                riak_core_stat_push_sup:stop_server(Instance),
-                riak_core_stat_persist:put(?PUSH_PREFIX,
-                    {Protocol, Instance},
-                    MapValue#{
-                        modified_dt => calendar:universal_time(),
-                        pid => undefined,
-                        running => false});
-            (_) -> ok
+        fun({{Protocol, Instance},#{running := true} = MapValue}) ->
+            stats_push_sup:stop_server(Instance),
+            stats_persist:put(?PUSH_PREFIX,
+                {Protocol, Instance},
+                MapValue#{modified_dt => calendar:universal_time(),
+                          pid => undefined,
+                          running => false})
         end, ChildrenInfo).
 
 
 %%%-----------------------------------------------------------------------------
 %% @doc
-%% Get information on the stats polling, as in the date and time the
-%% stats pushing began, and the port, serverip, instance etc that was
-%% given at the time of setup - but for all nodes in the cluster
+%% Get information on the stats polling, as in the date and time the stats
+%% pushing began, and the port, server_ip, instance etc that was given at the
+%% time of setup - but for all nodes in the cluster
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(find_push_stats_all(consolearg()) -> ok | error()).
+-spec(find_push_stats_all(console_arg()) -> no_return()).
 find_push_stats_all(Arg) ->
     find_push_stats([node()|nodes()],Arg).
 
 %%%-----------------------------------------------------------------------------
 %% @doc
-%% Get information on the stats polling, as in the date and time the
-%% stats pushing began, and the port, serverip, instance etc that was
-%% given at the time of setup
+%% Get information on the stats polling, as in the date and time the stats
+%% pushing began, and the port, server_ip, instance etc that was given at the
+%% time of setup
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(find_push_stats(consolearg()) -> ok | error()).
+-spec(find_push_stats(console_arg()) -> no_return()).
 find_push_stats(Arg) ->
     find_push_stats([node()], Arg).
 
--spec(find_push_stats(node_or_nodes(), consolearg()) -> print()).
+-spec(find_push_stats([node()], console_arg()) -> print()).
 find_push_stats(_Nodes,[]) ->
     print_info({error,badarg});
 find_push_stats(Nodes, ["*"]) ->
@@ -690,7 +653,7 @@ find_push_stats(Nodes,Arg) ->
     {Protocol, SanitisedData} = sanitise_push_input(Arg),
     print_info(fold_through_meta(Protocol, SanitisedData, Nodes)).
 
--spec(print_info(pusharg() | any()) -> print() | error()).
+-spec(print_info(push_arg() | any()) -> ok).
 print_info([]) ->
     io:fwrite("Nothing found~n");
 print_info({error,badarg}) ->
@@ -712,8 +675,7 @@ print_info(Info) ->
                     node        := Node,
                     port        := Port,
                     server_ip   := Sip,
-                    stats       := Stats}
-            }) ->
+                    stats       := Stats}}) ->
                 {ODate,OTime} = OriginalDateTime,
                 {MDate,MTime} = ModifiedDateTime,
                 LastDate = consistent_date(MDate),
@@ -744,7 +706,6 @@ consistent_date(Date) when is_list(Date) ->
     NewDate = integers_to_strings(Date),
     io_lib:format("~s/~s/~s ",NewDate).
 
-
 consistent_time(Time) when is_tuple(Time) ->
     consistent_time(tuple_to_list(Time));
 consistent_time(Time) when is_list(Time)->
@@ -752,13 +713,12 @@ consistent_time(Time) when is_list(Time)->
     io_lib:format("~s:~s:~s ",NewTime).
 
 integers_to_strings(IntegerList) ->
-    lists:map(fun
-                  (Num) when length(Num) < 2 -> "0"++Num;
-                  (Num) -> Num
-              end, [integer_to_list(N) || N <-IntegerList]).
+    lists:map(fun(Num) when length(Num) < 2 -> "0"++Num;
+                 (Num) -> Num
+              end, [integer_to_list(N) || N <- IntegerList]).
 
--spec(fold_through_meta(protocol(),sanitised_push(),node_or_nodes()) ->
-    listofpush()).
+
+-spec(fold_through_meta(protocol(),sanitised_push(),[node()]) -> [push_arg()]).
 fold_through_meta(Protocol, {{Port, Instance, ServerIp}, Stats}, Nodes) ->
     fold_through_meta(Protocol,Port,Instance,ServerIp,Stats,Nodes).
 fold_through_meta(Protocol, Port, Instance, ServerIp, Stats, Nodes) ->
@@ -767,12 +727,12 @@ fold_through_meta(Protocol, Port, Instance, ServerIp, Stats, Nodes) ->
             || Node <- Nodes]).
 
 -spec(fold(protocol(),port(),instance(),server_ip(),metrics(),node()) ->
-    listofpush()).
+                                                                  [push_arg()]).
 fold(Protocol, Port, Instance, ServerIp, Stats, Node) ->
     {Return, Port, ServerIp, Stats, Node} =
-        riak_core_metadata:fold(
+        cluster_metadata:fold(
             fun
-                ({{MProtocol, MInstance},   %% KEY would be the same
+                ({{MProtocol, MInstance},   %% Key would be the same
                     [#{node := MNode,
                         port := MPort,
                         server_ip := MSip,
@@ -787,7 +747,7 @@ fold(Protocol, Port, Instance, ServerIp, Stats, Node) ->
                     {[{{MProtocol,MInstance}, MapValue} | Acc],
                         APort, AServerIP, AStats,ANode};
 
-                %% Doesnt Match Guards above
+                %% Doesn't Match Guards above
                 ({_K, _V}, {Acc, APort, AServerIP,AStats,ANode}) ->
                     {Acc, APort, AServerIP,AStats,ANode}
             end,
@@ -803,7 +763,7 @@ fold(Protocol, Port, Instance, ServerIp, Stats, Node) ->
 %% up an endpoint, This is specific to the endpoint functions
 %% @end
 %%------------------------------------------------------------------------------
--spec(sanitise_push_input(consolearg()) -> {protocol(),sanitised_push()} | error()).
+-spec(sanitise_push_input(console_arg()) -> {protocol(),sanitised_push()}).
 sanitise_push_input(ListofArgs) ->
     lists:foldl(
         fun
@@ -835,15 +795,7 @@ sanitise_push_input(ListofArgs) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Other Functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%-----------------------------------------------------------------------------
-%% @doc
-%% Print stats is generic, and used by both stat show and stat info,
-%% Stat info includes all the attributes that will be printed whereas stat show
-%% will pass in an empty list into the Attributes field.
-%% @end
-%%%-----------------------------------------------------------------------------
--spec(print(atom() | string() | list()
-| {listofstats(),datapoints()}) -> print()).
+-spec(print(atom()|string()|list()|{listofstats(),datapoints()}) -> print()).
 print(undefined)   -> print([]);
 print([undefined]) -> print([]);
 print({Stats,DPs}) -> print(Stats,DPs);
@@ -877,4 +829,3 @@ legacy_map(Legacy) ->
                   (_) ->
                       []
               end, Legacy).
-
