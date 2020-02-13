@@ -68,18 +68,14 @@
 -module(stats_profiles).
 
 %% API
--export([
-    save_profile/1,
-    load_profile/2,
-    delete_profile/1,
-    reset_profile/1]).
+-export([save_profile/1, load_profile/2, delete_profile/1, reset_profile/1]).
 
--define(PROFILE_PREFIX,                                       {profiles, list}).
--define(PROFILE_KEY(Profile),                        ?PROFILE_PREFIX, Profile}).
+-define(PROFILE_PREFIX,           {profiles, list}).
+-define(PROFILE_KEY(Profile),     ?PROFILE_PREFIX, Profile}).
 
--define(LOADED_PREFIX,                                      {profiles, loaded}).
--define(LOADED_PKEY,                                  {?LOADED_PREFIX, node()}).
--define(LOADED_PKEY(Key),                                {?LOADED_PREFIX, Key}).
+-define(LOADED_PREFIX,            {profiles, loaded}).
+-define(LOADED_PKEY,              {?LOADED_PREFIX, node()}).
+-define(LOADED_PKEY(Key),         {?LOADED_PREFIX, Key}).
 
 -type profilename() :: [string()].
 
