@@ -16,13 +16,15 @@
     reset_profile/0, reset_profile_all/0,
 
     %% Push API Exports
-    setup/1, setdown/1,
-    find_push_stats/1, find_push_stats/2, find_push_stats_all/1,
-        sanitise_push_input/1, store_setup_info/3,
+    setup/1, setdown/1, find_push_stats/1, find_push_stats_all/1,
+        sanitise_push_input/1,
 
     %% Other API
-    print/1, print/2, fold_through_meta/3]).
+    print/1, print/2]).
 
+%%%=============================================================================
+%%% API
+%%%=============================================================================
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Stats Functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -506,45 +508,57 @@ print_profile(Action,{{error,Reason},ProfileName}) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Push Functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%-----------------------------------------------------------------------------
-%%% @doc
-%%% From "stats push setup ___" to this module, you can poll the stats from
-%%% exometer and setup a server to push those stats to an udp endpoint.
-%%% The server can be terminated to stop the pushing of stats.
-%%% @end
-%%%-----------------------------------------------------------------------------
-
--define(NEW_MAP,#{original_dt => calendar:universal_time(),
-                  modified_dt => calendar:universal_time(),
-                  pid => undefined,
-                  running => true,
-                  node => node(),
-                  port => undefined,
-                  server_ip => undefined,
-                  stats => ['_']}).
-
--define(PUT_MAP(Pid,Port,Server,Stats,Map),Map#{pid => Pid,
-                                                port => Port,
-                                                server_ip => Server,
-                                                stats => Stats}).
-
--define(STAT_MAP(Map), Map#{modified_dt => calendar:universal_time(),
-                            running => true}).
-
-%%%-----------------------------------------------------------------------------
-%% @doc
-%% The default operation of this function is to start up the pushing / polling
-%% of stats from exometer to the UDP/TCP endpoint. The ability to pass in an
-%% argument gives the added layer of functionality to choose the endpoint
-%% details quicker and easier,
-%%
-%% If the server is already setup and polling stats, setting up another will
-%% start up another gen_server.
-%% @end
+%% @doc Setup a gen_server to push stats to an endpoint
+%% @see stats_push:maybe_start_server/2 @end
 %%%-----------------------------------------------------------------------------
 -spec(setup(console_arg()) -> no_return()).
 setup(ListofArgs) ->
     {Protocol, Data} = sanitise_push_input(ListofArgs),
-    maybe_start_server(Protocol, Data).
+    print_info(stats_push:maybe_start_server(Protocol, Data)).
+
+%%%-----------------------------------------------------------------------------
+%% @doc kill the gen_server that is pushing stats to an endpoint,
+%% @see stats_push:terminate_server/2 @end
+%%%-----------------------------------------------------------------------------
+-spec(setdown(console_arg()) -> no_return()).
+setdown(ListofArgs) ->
+    {Protocol, Data} = sanitise_push_input(ListofArgs),
+    print_info(stats_push:terminate_server(Protocol, Data)).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Sanitise the data coming in, into the necessary arguments for setting
+%% up an endpoint, This is specific to the endpoint functions
+%% @end
+%%------------------------------------------------------------------------------
+-spec(sanitise_push_input(console_arg()) -> {protocol(),sanitised_push()}).
+sanitise_push_input(ListofArgs) ->
+    lists:foldl(
+        fun
+        %% Protocol specified
+            ("tcp", {_ProAcc,{{PortAcc,InAcc,HostAcc},StatAcc}}) ->
+                {tcp,{{PortAcc,InAcc,HostAcc},StatAcc}};
+            ("udp", {_ProAcc,{{PortAcc,InAcc,HostAcc},StatAcc}}) ->
+                {udp,{{PortAcc,InAcc,HostAcc},StatAcc}};
+            %% Find the Host and Port
+            (HostPortOrNot, {ProAcc,{{PortAcc,InAcc,HostAcc},StatAcc}}) ->
+                case host_port(HostPortOrNot) of
+                    {NoHost, []} ->
+                        case string:find(NoHost, ".") of
+                            nomatch -> %% Then its instance
+                                TheInstance = NoHost,
+                                {ProAcc,{{PortAcc,TheInstance,HostAcc},StatAcc}};
+                            _ -> %% Its a stat request
+                                AStats = NoHost,
+                                {TheStats,_,_,_} = sanitise_stat_input([AStats]),
+                                {ProAcc,{{PortAcc,InAcc,HostAcc},TheStats}}
+                        end;
+                    {AHost,APort} ->
+                        TheHost = hostname(AHost),
+                        ThePort = port(APort),
+                        {ProAcc,{{ThePort,InAcc,TheHost},StatAcc}}
+                end
+        end, {'_',{{'_','_','_'},'_'}}, ListofArgs).
 
 host_port(HostPort) ->
     [Host|Port] = re:split(HostPort,"\\:",[{return,list}]),
@@ -556,102 +570,23 @@ hostname(Host) -> list_to_atom(Host).
 port([Port]) -> port(Port);
 port(Port) -> list_to_integer(Port).
 
--spec(maybe_start_server(protocol(),sanitised_push()) -> ok | no_return()).
-maybe_start_server(Protocol, {{Port, Instance,Sip},'_'}) ->
-    maybe_start_server(Protocol, {{Port,Instance,Sip},['_']});
-maybe_start_server(Protocol, {{Port,Instance,Sip},Stats}) ->
-    case fold_through_meta(Protocol,{{'_',Instance,'_'},'_'}, [node()]) of
-        [] ->
-            Pid = start_server(Protocol,{{Port,Instance,Sip},Stats}),
-            MapValue = ?PUT_MAP(Pid,Port,Sip,Stats,?NEW_MAP),
-            store_setup_info({Protocol, Instance},MapValue,new);
-        Servers ->
-            maybe_start_server(Servers,Protocol,{{Port,Instance,Sip},Stats})
-    end.
-maybe_start_server(ServersFound,Protocol,{{Port,Instance,Sip},Stats}) ->
-    lists:foreach(
-        fun
-            ({{_Pr,_In}, #{running := true}}) ->
-                io:fwrite("Server of that instance is already running~n");
-            ({{_Pr,_In}, #{running := false} = ExistingMap}) ->
-                Pid =
-                    start_server(Protocol, {{Port, Instance, Sip}, Stats}),
-                MapValue = ?PUT_MAP(Pid,Port,Sip,Stats,ExistingMap),
-                store_setup_info({Protocol, Instance}, MapValue, existing)
-        end, ServersFound).
-
--spec(start_server(protocol(), sanitised_push()) -> no_return()).
-start_server(Protocol, Arg) ->
-    stats_push_sup:start_server(Protocol, Arg).
-
--spec(store_setup_info(push_key(),push_value(), (new | existing))
-                                                     -> ok | print() | error()).
-store_setup_info({_Key,_Instance},
-    #{pid := NotPid}, _Type) when is_pid(NotPid) == false -> ok;
-store_setup_info(Key, MapValues, new) ->
-    stats_persist:put(?PUSH_PREFIX, Key, MapValues);
-store_setup_info(Key, MapValues = #{running := _Bool}, existing) ->
-    NewMap = ?STAT_MAP(MapValues),
-    stats_persist:put(?PUSH_PREFIX, Key, NewMap).
 
 %%%-----------------------------------------------------------------------------
-%% @doc
-%% Kill the udp servers currently running and pushing stats to an endpoint.
-%% Stop the pushing of stats by taking the setup of the udp gen_server down
-%% @end
-%%%-----------------------------------------------------------------------------
--spec(setdown(console_arg()) -> no_return()).
-setdown(ListofArgs) ->
-    {Protocol, Data} = sanitise_push_input(ListofArgs),
-    terminate_server(Protocol, Data).
-
-%% @doc change the undefined into
--spec(terminate_server(protocol(), sanitised_push()) -> no_return()).
-terminate_server(Protocol, {{Port, Instance, Sip},Stats}) ->
-    stop_server(fold(Protocol, Port, Instance, Sip, Stats, node())).
-
-stop_server(ChildrenInfo) ->
-    lists:foreach(
-        fun({{Protocol, Instance},#{running := true} = MapValue}) ->
-            stats_push_sup:stop_server(Instance),
-            stats_persist:put(?PUSH_PREFIX,
-                {Protocol, Instance},
-                MapValue#{modified_dt => calendar:universal_time(),
-                          pid => undefined,
-                          running => false})
-        end, ChildrenInfo).
-
-
-%%%-----------------------------------------------------------------------------
-%% @doc
-%% Get information on the stats polling, as in the date and time the stats
-%% pushing began, and the port, server_ip, instance etc that was given at the
-%% time of setup - but for all nodes in the cluster
-%% @end
+%% @doc find information about stats that are being pushed on all nodes @end
 %%%-----------------------------------------------------------------------------
 -spec(find_push_stats_all(console_arg()) -> no_return()).
 find_push_stats_all(Arg) ->
-    find_push_stats([node()|nodes()],Arg).
+    Sanitised = sanitise_push_input(Arg),
+    print_info(stats_push:find_push_stats([node()|nodes()],Sanitised)).
 
 %%%-----------------------------------------------------------------------------
-%% @doc
-%% Get information on the stats polling, as in the date and time the stats
-%% pushing began, and the port, server_ip, instance etc that was given at the
-%% time of setup
-%% @end
+%% @doc find information about stats that are being pushed on this node @end
 %%%-----------------------------------------------------------------------------
 -spec(find_push_stats(console_arg()) -> no_return()).
 find_push_stats(Arg) ->
-    find_push_stats([node()], Arg).
+    Sanitised = sanitise_push_input(Arg),
+    print_info(stats_push:find_push_stats([node()], Sanitised)).
 
--spec(find_push_stats([node()], console_arg()) -> print()).
-find_push_stats(_Nodes,[]) ->
-    print_info({error,badarg});
-find_push_stats(Nodes, ["*"]) ->
-    print_info(fold_through_meta('_','_','_','_','_', Nodes));
-find_push_stats(Nodes,Arg) ->
-    {Protocol, SanitisedData} = sanitise_push_input(Arg),
-    print_info(fold_through_meta(Protocol, SanitisedData, Nodes)).
 
 -spec(print_info(push_arg() | any()) -> ok).
 print_info([]) ->
@@ -717,80 +652,6 @@ integers_to_strings(IntegerList) ->
                  (Num) -> Num
               end, [integer_to_list(N) || N <- IntegerList]).
 
-
--spec(fold_through_meta(protocol(),sanitised_push(),[node()]) -> [push_arg()]).
-fold_through_meta(Protocol, {{Port, Instance, ServerIp}, Stats}, Nodes) ->
-    fold_through_meta(Protocol,Port,Instance,ServerIp,Stats,Nodes).
-fold_through_meta(Protocol, Port, Instance, ServerIp, Stats, Nodes) ->
-    lists:flatten(
-        [fold(Protocol, Port, Instance, ServerIp, Stats, Node)
-            || Node <- Nodes]).
-
--spec(fold(protocol(),port(),instance(),server_ip(),metrics(),node()) ->
-                                                                  [push_arg()]).
-fold(Protocol, Port, Instance, ServerIp, Stats, Node) ->
-    {Return, Port, ServerIp, Stats, Node} =
-        cluster_metadata:fold(
-            fun
-                ({{MProtocol, MInstance},   %% Key would be the same
-                    [#{node := MNode,
-                        port := MPort,
-                        server_ip := MSip,
-                        stats := MStats} = MapValue]},
-
-                    {Acc, APort, AServerIP, AStats, ANode}) %% Acc and Guard
-                    when (APort     == MPort  orelse APort     == '_')
-                    and  (AServerIP == MSip   orelse AServerIP == '_')
-                    and  (ANode     == MNode  orelse ANode     == node())
-                    and  (AStats    == MStats orelse AStats    == '_') ->
-                    %% Matches all the Guards given in Acc
-                    {[{{MProtocol,MInstance}, MapValue} | Acc],
-                        APort, AServerIP, AStats,ANode};
-
-                %% Doesn't Match Guards above
-                ({_K, _V}, {Acc, APort, AServerIP,AStats,ANode}) ->
-                    {Acc, APort, AServerIP,AStats,ANode}
-            end,
-            {[], Port, ServerIp, Stats, Node}, %% Accumulator
-            ?PUSH_PREFIX, %% Prefix to Iterate over
-            [{match, {Protocol, Instance}}] %% Key to Object match
-        ),
-    Return.
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% Sanitise the data coming in, into the necessary arguments for setting
-%% up an endpoint, This is specific to the endpoint functions
-%% @end
-%%------------------------------------------------------------------------------
--spec(sanitise_push_input(console_arg()) -> {protocol(),sanitised_push()}).
-sanitise_push_input(ListofArgs) ->
-    lists:foldl(
-        fun
-        %% Protocol specified
-            ("tcp", {_ProAcc,{{PortAcc,InAcc,HostAcc},StatAcc}}) ->
-                {tcp,{{PortAcc,InAcc,HostAcc},StatAcc}};
-            ("udp", {_ProAcc,{{PortAcc,InAcc,HostAcc},StatAcc}}) ->
-                {udp,{{PortAcc,InAcc,HostAcc},StatAcc}};
-            %% Find the Host and Port
-            (HostPortOrNot, {ProAcc,{{PortAcc,InAcc,HostAcc},StatAcc}}) ->
-                case host_port(HostPortOrNot) of
-                    {NoHost, []} ->
-                        case string:find(NoHost, ".") of
-                            nomatch -> %% Then its instance
-                                TheInstance = NoHost,
-                                {ProAcc,{{PortAcc,TheInstance,HostAcc},StatAcc}};
-                            _ -> %% Its a stat request
-                                AStats = NoHost,
-                                {TheStats,_,_,_} = sanitise_stat_input([AStats]),
-                                {ProAcc,{{PortAcc,InAcc,HostAcc},TheStats}}
-                        end;
-                    {AHost,APort} ->
-                        TheHost = hostname(AHost),
-                        ThePort = port(APort),
-                        {ProAcc,{{ThePort,InAcc,TheHost},StatAcc}}
-                end
-        end, {'_',{{'_','_','_'},'_'}}, ListofArgs).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Other Functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
