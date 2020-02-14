@@ -1,48 +1,42 @@
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 %%% @doc
-%%%
+%%% Server to push stats to an endpoint via UDP
 %%% @end
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(stats_push_udp_serv).
--include("stat_push").
+-include("stats_push.hrl").
 -behaviour(gen_server).
 
 %% API
 -export([start_link/1]).
 
 %% gen_server callbacks
--export([init/1,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2,
-    terminate/2,
-    code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3]).
 
 -define(SERVER, ?MODULE).
 
--record(state, {
-    socket        :: socket(),
-    server        :: server_ip(),
-    latency_port  :: push_port(),
-    hostname      :: hostname(),
-    instance      :: instance(),
-    stats         :: listofstats()
-}).
+-record(state, {socket        :: socket(),
+                server        :: server_ip(),
+                latency_port  :: push_port(),
+                hostname      :: hostname(),
+                instance      :: instance(),
+                stats         :: listofstats()}).
 
 -define(PROTOCOL, udp).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
 -spec(start_link(Arg :: term()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(Obj) ->
     gen_server:start_link(?MODULE, Obj, []).
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
 -spec(init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
@@ -56,7 +50,7 @@ init([Options]) ->
             {stop, Error}
     end.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: #state{}) ->
     {reply, Reply :: term(), NewState :: #state{}} |
@@ -68,7 +62,7 @@ init([Options]) ->
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec(handle_cast(Request :: term(), State :: #state{}) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
@@ -76,19 +70,19 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Request, State) ->
     {noreply, State}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec(handle_info(Info :: timeout() | term(), State :: #state{}) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_info(refresh_monitor_server_ip, State = #state{server = MonitorServer}) ->
+handle_info(refresh_monitor_server_ip, State = #state{server = MonitorServer})->
     NewState = case inet:gethostbyname(MonitorServer) of
                    {ok,{hostent,_Hostname,_,_,_, [MonitorServerIp]}} ->
                        State#state{server = MonitorServerIp};
                    Other ->
                        lager:warning(
-                           "Unable to refresh ip address of monitor server due to ~p,
-                            retrying in ~p ms~n",
+                           "Unable to refresh ip address of monitor server
+                            Due to ~p, retrying in ~p ms~n",
                            [Other, ?REFRESH_INTERVAL]),
                        State
                end,
@@ -105,7 +99,7 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
 terminate(shutdown, #state{instance = Instance}) ->
@@ -115,17 +109,16 @@ terminate(shutdown, #state{instance = Instance}) ->
 terminate(_Reason, _State) ->
     ok.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec(code_change(OldVsn :: term() | {down, term()}, State :: #state{},
     Extra :: term()) ->
     {ok, NewState :: #state{}} | {error, Reason :: term()}).
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
-
+%%%=============================================================================
 
 open({{Port, _Instance, _Sip}, _Stats}=Info) ->
     Options = ?OPTIONS,
@@ -152,14 +145,13 @@ create_state(Socket, {{MonitorLatencyPort, Instance, Sip}, Stats}) ->
 refresh_monitor_server_ip() ->
     send_after(?REFRESH_INTERVAL, refresh_monitor_server_ip).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
 terminate_server(Instance) ->
     Key = {?PROTOCOL, Instance},
-    Prefix = {riak_stat_push, node()},
-    riak_core_stat_push_sup:stop_running_server(Prefix,Key).
+    stats_push_sup:stop_running_server(?PUSH_PREFIX,Key).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
 send(Socket, Host, Port, Data) ->
     gen_udp:send(Socket, Host, Port, Data).
@@ -167,14 +159,14 @@ send(Socket, Host, Port, Data) ->
 send_after(Interval, Arg) ->
     erlang:send_after(Interval,self(),Arg).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @doc
 %% Retrieve the stats from exometer and convert to json object, to
 %% send to the endpoint. Repeat.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 push_stats(Socket, ComponentHostname, Port, Stats) ->
-    JsonStats = riak_core_stat_push_util:json_stats(Stats),
+    JsonStats = stats_push_util:json_stats(Stats),
     send(Socket, ComponentHostname, Port, JsonStats),
     push_stats().
 
