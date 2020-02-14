@@ -1,7 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @doc
-%%% Supervisor to Start up the push_supervisor
-%%% @end
+%%% @doc Supervisor to Start up the push_supervisor @end
 %%%-----------------------------------------------------------------------------
 -module(stats_sup).
 

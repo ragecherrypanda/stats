@@ -20,11 +20,11 @@
 -define(INTENSITY, 1).
 -define(PERIOD,    5).
 
--define(ATTEMPTS,               50).
--define(RESTART,  transient).
--define(SHUTDOWN, 5000).
+-define(ATTEMPTS,  50).
+-define(RESTART,   transient).
+-define(SHUTDOWN,  5000).
 
--define(SERVER, ?MODULE).
+-define(SERVER,    ?MODULE).
 -define(TCP_CHILD, stats_push_tcp_serv).
 -define(UDP_CHILD, stats_push_udp_serv).
 
@@ -69,13 +69,15 @@ log_and_respond({Child, Response}) ->
     log(Child, Response),
     respond(Response).
 
-log(Child,{ok,ok}) ->
-    lager:info("Child Terminated and Deleted successfully : ~p",[Child]);
+%% @doc second argument is tuple, only provided by stop_server/1 @end
+log(Child,{ok,ok}) -> lager:info("Child Terminated and Deleted : ~p",[Child]);
 log(Child,{ok,Error}) ->
-    lager:info("Child Terminated successfully : ~p",[Child]),
-    lager:info("Error in Deleteing ~p : ~p",[Child,Error]);
+    lager:info("Child Terminated : ~p",[Child]),
+    lager:info("Error in Deleting ~p : ~p",[Child,Error]);
 log(Child,{Error,_}) ->
     lager:info("Child ~p termination error : ~p",[Child,Error]);
+
+%% @doc Responses for start_server/2 @end
 log(Child, Pid) when is_pid(Pid)->
     lager:info("Child started : ~p with Pid : ~p",[Child,Pid]);
 log(Child, attempts_failed) ->

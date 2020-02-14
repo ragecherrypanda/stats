@@ -1,93 +1,23 @@
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 %%% @doc
-%%%
+%%% Functions called by the TCP and UDP gen_servers and as well as the wm module
 %%% @end
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(stats_push_util).
 -include("stats.hrl").
 -include("stats_push.hrl").
 
--export([
-    encode/1]).
+-export([json_stats/1]).
 
--export([
-    json_stats/1,
-    get_stats/1]).
-
-
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 %% @doc
-%% Get the stats from exometer and convert them into json objects
-%% for both riak_stat_push_tcp/udp and riak_stat_wm.
+%% called by push_stats/4-5 in stats_push_tcp/udp to collect stats from
+%% get_stats/1 and convert them to json objects
 %% @end
-%%%-------------------------------------------------------------------
--spec(get_stats(push_arg()) -> term()).
-get_stats(Arg) ->
-    Stats = stats:get_values(Arg),
-    lists:map(fun({N,V}) ->
-        NewName = parse_name(N),
-        NewValues = parse_values(V),
-        {NewName,NewValues}
-              end, Stats).
-
-parse_name([riak | Name]) ->
-    parse_name(Name);
-parse_name(Name) ->
-    [App | Stat] = Name,
-    S = atom_to_list(App),
-    T = ": ",
-    R = stringifier(Stat),
-    S++T++R.
-
-stringifier(Stat) ->
-    lists:foldr(fun
-                    (S,Acc) when is_list(S) ->
-                        S++" "++Acc;
-                    (I,Acc) when is_integer(I) ->
-                        integer_to_list(I)++" "++Acc;
-                    ({IpAddr,Port},Acc) when is_tuple(IpAddr)->
-                        T = ip_maker(IpAddr),
-                        P = integer_to_list(Port),
-                        "{"++T++","++P++"}"++" "++Acc;
-                    ({IpAddr,Port},Acc) when is_list(IpAddr)->
-                        T = IpAddr,
-                        P = integer_to_list(Port),
-                        "{"++T++","++P++"}"++" "++Acc;
-                    (T,Acc) when is_tuple(T) ->
-                        tuple_to_list(T)++" "++Acc;
-                    (L,Acc) when is_atom(L) ->
-                        atom_to_list(L)++" "++Acc;
-                    (_Other,Acc) ->
-                        Acc
-                end, " = ",Stat).
-
-ip_maker([IPAddr]) ->
-    ip_maker(IPAddr);
-ip_maker(IPAddr) when is_tuple(IPAddr)->
-    inet:ntoa(IPAddr);
-ip_maker(IPAddr) when is_list(IPAddr) ->
-    {ok, TupleAddress} = inet:parse_ipv4_address(IPAddr),
-    TupleAddress.
-
-parse_values(Values) ->
-    lists:foldl(fun
-                    ({value,{ok,Vals}},Acc) -> [parse_values(Vals)|Acc];
-                    ({ok,Vals},Acc) -> [parse_values(Vals)|Acc];
-                    ({ms_since_reset,_V},Acc) -> Acc;
-                    (V,Acc) -> [V|Acc]
-                end, [],Values).
-
-
-%%%-------------------------------------------------------------------
-%% @doc
-%% called by push_stats/4-5 in riak_stat_push_tcp/udp to collect
-%% stats from get_stats/1 and convert them to json objects
-%% @end
-%%%-------------------------------------------------------------------
--spec(json_stats(found_stats()) -> any()).
+%%%-----------------------------------------------------------------------------
+-spec(json_stats(term()) -> list()).
 json_stats(Stats) ->
-    Metrics = get_stats(Stats),
-    JsonStats = encode(Metrics),
+    JsonStats = encode(get_stats(Stats)),
     DateTime = format_time(os:timestamp()),
     [${, quote("timestamp"), $:, quote(DateTime), $,, JsonStats, $}, "\n"].
 
@@ -104,17 +34,66 @@ encode(Metrics) ->
 quote(X) ->
     [$", X, $"].
 
--define(MILLISECONDS_MICROSECONDS_DIVISOR,1000).
--define(SECS_MILLISECOND_DIVISOR,1000).
+-define(MILLISECONDS_MICROSECONDS_DIVISOR,  1000).
+-define(SECS_MILLISECOND_DIVISOR,           1000).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @doc
 %% For a given timestamp, returns the string representation in the following
 %% format, YYYY.MM.ddTHH:mm:ss.SSSZ the time is in UTC.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec(format_time(erlang:timestamp()) -> string()).
 format_time(Now) ->
     DateTime = calendar:now_to_universal_time(Now),
     httpd_util:rfc1123_date(DateTime).
+
+%%%-----------------------------------------------------------------------------
+%% @doc
+%% Get the stats from exometer and convert them into json objects for both
+%% stats_push_tcp/udp and stats_wm.
+%% @end
+%%%-----------------------------------------------------------------------------
+-spec(get_stats(push_arg()) -> list()).
+get_stats(Arg) ->
+    Stats = stats:get_values(Arg),
+    StringList =
+        lists:map(fun({N,V}) ->
+            NewName = parse_name(N),
+            NewValues = parse_values(V),
+            {NewName,NewValues}
+                  end, Stats),
+    StringList.
+
+parse_name(Name) ->
+    [App | Stat] = Name,
+    S = atom_to_list(App),
+    T = ": ",
+    R = stringifier(Stat),
+    S++T++R.
+
+stringifier(Stat) ->
+    lists:foldr(fun
+                    ({IpAddr, Port}, Acc) when is_tuple(IpAddr) ->
+                        T = inet:ntoa(IpAddr),
+                        P = integer_to_list(Port),
+                        "{" ++ T ++ "," ++ P ++ "}" ++ " " ++ Acc;
+                    ({IpAddr, Port}, Acc) when is_list(IpAddr) ->
+                        T = IpAddr,
+                        P = integer_to_list(Port),
+                        "{" ++ T ++ "," ++ P ++ "}" ++ " " ++ Acc;
+                    (S,Acc) when is_list(S)    -> S++" "++Acc;
+                    (I,Acc) when is_integer(I) -> integer_to_list(I)++" "++Acc;
+                    (T,Acc) when is_tuple(T)   -> tuple_to_list(T)  ++" "++Acc;
+                    (L,Acc) when is_atom(L)    -> atom_to_list(L)   ++" "++Acc;
+                    (_Other,Acc) -> Acc
+                end, " = ", Stat).
+
+parse_values(Values) ->
+    lists:foldl(fun
+                    ({value,{ok,Vals}},Acc) -> [parse_values(Vals)|Acc];
+                    ({ok,Vals},Acc)         -> [parse_values(Vals)|Acc];
+                    ({ms_since_reset,_V},Acc) -> Acc;
+                    (V,Acc) -> [V|Acc]
+                end, [],Values).
 

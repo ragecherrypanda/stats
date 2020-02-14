@@ -1,0 +1,164 @@
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats.erl:211: The pattern 'false' can never match the type 'true'
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats.erl:227: The pattern <Name, T> can never match since previous clauses completely covered the type <_,'_'>
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats.erl:265: The call stats:get_stats([nonempty_improper_list(any(),'_'),...]) will never return since the success typing is ([[atom() | [any()]]]) -> [{[atom() | [any()]],'_' | 'disabled' | 'enabled' | 'unregistered'},...] and the contract is (metricname()) -> no_return()
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats.erl:265: Cons will produce an improper list since its 2nd argument is '_'
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats.erl:284: Cons will produce an improper list since its 2nd argument is '_'
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats.erl:289: Function stat_info/1 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats.erl:396: Function print/1 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_app.erl:28: Call to missing or unexported function lager:error/2
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_app.erl:44: Call to missing or unexported function lager:info/2
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_app.erl:46: Call to missing or unexported function lager:error/2
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:99: The pattern {Entries, _DataPoint} can never match the type [{[atom() | [any()]],'_' | 'disabled' | 'enabled' | 'unregistered'},...]
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:110: Function reset_stat/1 has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:111: The pattern {Found, _DataPoints} can never match the type [{[atom() | [any()]],'_' | 'disabled' | 'enabled' | 'unregistered'},...]
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:125: The call stats_console:stat_metadata('enabled') breaks the contract ([string()]) -> 'ok'
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:126: The call stats_console:stat_metadata('disabled') breaks the contract ([string()]) -> 'ok'
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:127: The call stats_console:stat_metadata('status') breaks the contract ([string()]) -> 'ok'
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:289: Call to missing or unexported function lager:error/1
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:336: The pattern '_' can never match the type [binary() | maybe_improper_list(any(),binary() | [])]
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:337: The pattern "**" can never match the type [binary() | maybe_improper_list(any(),binary() | [])]
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:346: The pattern '_' can never match the type binary() | maybe_improper_list(any(),binary() | [])
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:353: Call to missing or unexported function lager:error/2
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:379: Call to missing or unexported function stats:find_entries/4
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:390: Call to missing or unexported function stats:get_datapoint/2
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:584: The call stats_console:sanitise_push(HostPort::any(),Protocol::any(),Instance::any(),['_',...]) will never return since it differs in the 4th argument from the success typing arguments: (binary() | maybe_improper_list(binary() | maybe_improper_list(any(),binary() | []) | char(),binary() | []),string(),any(),[string()])
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:587: Call to missing or unexported function lager:error/1
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:609: Call to missing or unexported function stats_push_util:ip_maker/1
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_console.erl:635: Function print_info/1 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_persist.erl:50: The pattern [{Stat, _Type, Status} | _] can never match the type [{[any()],'_' | 'disabled' | 'enabled' | 'unregistered'}]
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_persist.erl:95: Guard test is_list(Stat::{{'stats',atom()},_}) can never succeed
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_persist.erl:176: The call stats_persist:re_register(StatName::any(),{'enabled',_,_,_}) breaks the contract (metricname(),tuple_stat()) -> 'ok'
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_persist.erl:179: The pattern MapValue = #{'status':=MStatus} can never match the type atom() | [any(),...]
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_persist.erl:190: Call to missing or unexported function lager:debug/2
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_persist.erl:203: The call stats_persist:re_register(StatName::any(),Value::#{'aliases':=_, 'options':=_, 'status':=_, 'type':=_}) breaks the contract (metricname(),tuple_stat()) -> 'ok'
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_persist.erl:219: Guard test is_map(MapValue::atom() | [any(),...]) can never succeed
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_persist.erl:228: The created fun has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_persist.erl:229: The call stats_persist:set_options(StatInfo::any(),{_,_}) breaks the contract (metricname() | persist_key(),options()) -> 'ok' | no_return()
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_persist.erl:233: The call stats_persist:set_options(Statname::any(),{_,_,[any()],_}) breaks the contract (metricname() | persist_key(),options()) -> 'ok' | no_return()
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_persist.erl:247: The pattern MapValue = #{'status':=Status} can never match the type atom() | [any()]
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_profiles.erl:105: Function load_profile/2 has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_profiles.erl:116: The created fun has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_profiles.erl:135: Function get_profile/1 has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_profiles.erl:138: Call to missing or unexported function stats_persist:check_meta/1
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_profiles.erl:138: The call stats_persist:check_meta(ProfileKey::{{'profiles','list'},_}) will never return since it differs in the 1st argument from the success typing arguments: ({{'stats',atom()},_})
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_profiles.erl:166: Function delete_profile/1 has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_profiles.erl:173: The created fun has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_profiles.erl:182: Function unload_profile/2 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_profiles.erl:183: Call to missing or unexported function stats_persist:check_meta/1
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_profiles.erl:194: Function reset_profile/1 has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_profiles.erl:197: The created fun has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_profiles.erl:198: Call to missing or unexported function stats_persist:check_meta/1
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_profiles.erl:198: The call stats_persist:check_meta({{'profiles','loaded'},_}) will never return since it differs in the 1st argument from the success typing arguments: ({{'stats',atom()},_})
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push.erl:44: Function maybe_start_server/2 has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push.erl:47: The call stats_push:fold_through_meta(Protocol::any(),{{'_',_,'_'},'_'},[atom(),...]) breaks the contract (protocol(),sanitised_push(),[node()]) -> [push_arg()]
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push.erl:55: Function maybe_start_server/3 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push.erl:68: Function start_server/2 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_sup.erl:84: Call to missing or unexported function lager:info/2
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_sup.erl:90: Call to missing or unexported function lager:error/2
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_sup.erl:105: The return type {'error',_} | {'ok',{{'one_for_all',non_neg_integer(),0} | {'one_for_one',non_neg_integer(),0} | {'rest_for_one',non_neg_integer(),0} | {'simple_one_for_one',non_neg_integer(),0},[{_,{atom(),atom(),'undefined' | [any()]},'permanent' | 'temporary' | 'transient','brutal_kill' | 'infinity' | non_neg_integer(),'supervisor' | 'worker','dynamic' | [atom()]} | #{'id':=_, 'start':={atom(),atom(),'undefined' | [any()]}, 'modules'=>'dynamic' | [atom()], 'restart'=>'permanent' | 'temporary' | 'transient', 'shutdown'=>'brutal_kill' | 'infinity' | non_neg_integer(), 'type'=>'supervisor' | 'worker'}]}} in the specification of init/1 is not a subtype of 'ignore' | {'ok',{{'one_for_all',non_neg_integer(),pos_integer()} | {'one_for_one',non_neg_integer(),pos_integer()} | {'rest_for_one',non_neg_integer(),pos_integer()} | {'simple_one_for_one',non_neg_integer(),pos_integer()} | #{'intensity'=>non_neg_integer(), 'period'=>pos_integer(), 'strategy'=>'one_for_all' | 'one_for_one' | 'rest_for_one' | 'simple_one_for_one'},[{_,{atom(),atom(),'undefined' | [any()]},'permanent' | 'temporary' | 'transient','brutal_kill' | 'infinity' | non_neg_integer(),'supervisor' | 'worker','dynamic' | [atom()]} | #{'id':=_, 'start':={atom(),atom(),'undefined' | [any()]}, 'modules'=>'dynamic' | [atom()], 'restart'=>'permanent' | 'temporary' | 'transient', 'shutdown'=>'brutal_kill' | 'infinity' | non_neg_integer(), 'type'=>'supervisor' | 'worker'}]}}, which is the expected return type for the callback of the supervisor behaviour
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_sup.erl:112: Function init/1 has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_sup.erl:127: Function restart_children/0 has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_sup.erl:204: Function get_children/0 has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_sup.erl:206: The call stats_push:fold_through_meta('_',{{'_', '_', '_'}, '_'},[atom(),...]) breaks the contract (protocol(),sanitised_push(),[node()]) -> [push_arg()]
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_tcp_serv.erl:44: The pattern {'ok', State} can never match the type {'error',{'error',atom()}}
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_tcp_serv.erl:47: Call to missing or unexported function lager:error/2
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_tcp_serv.erl:90: Call to missing or unexported function lager:error/2
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_tcp_serv.erl:94: Call to missing or unexported function lager:info/2
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_tcp_serv.erl:139: Function send/2 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_tcp_serv.erl:141: Function send_after/2 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_tcp_serv.erl:154: Function schedule_push_stats/0 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_udp_serv.erl:44: The pattern {'ok', State} can never match the type {'error',atom()}
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_udp_serv.erl:48: Call to missing or unexported function lager:error/2
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_udp_serv.erl:92: Call to missing or unexported function lager:info/2
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_udp_serv.erl:134: Function send/4 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_udp_serv.erl:136: Function send_after/2 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_udp_serv.erl:149: Function schedule_push_stats/0 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_util.erl:19: Function json_stats/1 has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_util.erl:24: Function encode/1 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_util.erl:34: Function quote/1 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_util.erl:47: Function format_time/1 will never be called
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_push_util.erl:58: Function get_stats/1 has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_wm.erl:94: Function produce_body/2 has no local return
+
+/home/savannahallsop/github/riak/_checkouts/stats/src/stats_wm.erl:103: Function pretty_print/2 has no local return
+

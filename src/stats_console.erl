@@ -6,16 +6,17 @@
 -include("stats_push.hrl").
 
 -export([
-    %% Stat API Exports
+    %% Stat API
     show_stat/1, stat_info/1, stat_enable/1, stat_disable/1, status_change/2,
     reset_stat/1, stat_metadata/1,
         sanitise_stat_input/1, sanitise_stat_input/2, sanitise_stat_input/3,
 
-    %% Profile API Exports
+    %% Profile API
     save_profile/1, load_profile/1, load_profile_all/1, delete_profile/1,
-    reset_profile/0, reset_profile_all/0,
+    reset_profile/0, reset_profile_all/0, get_profile/1, get_all_profiles/0,
+    get_all_loaded_profiles/0, get_loaded_profile/0,
 
-    %% Push API Exports
+    %% Push API
     setup/1, setdown/1, find_push_stats/1, find_push_stats_all/1,
         sanitise_push_input/1,
 
@@ -53,7 +54,7 @@ stat_info(Arg) ->
 pick_info_attrs(Arg) ->
     Fun = get_attr_fun(),
     case lists:foldr(Fun, {[], []}, split_arg(Arg)) of
-        {[], Rest} ->          %% If no arguments given
+        {[], Rest} ->           %% If no arguments given
             {?INFO_STAT, Rest}; %% use all, and return arg
         Other ->
             Other
@@ -70,10 +71,10 @@ get_attr_fun() ->
         ("timestamp",{As, Ps}) -> {[timestamp | As], Ps};
         ("options",  {As, Ps}) -> {[options   | As], Ps};
         (P,          {As, Ps}) -> {As, [P | Ps]}
-    end.
+    end. %%% As -> Attributes , Ps -> Points
 
-split_arg(Str) ->
-    re:split(Str, "\\-", [{return, list}]).
+split_arg(String) ->
+    re:split(String, "\\-", [{return, list}]).
 
 %%%-----------------------------------------------------------------------------
 %% @doc enable the stats, if the stat is already enabled does nothing @end
@@ -95,7 +96,7 @@ stat_disable(Arg) -> print(status_change(Arg, disabled)).
 %%%-----------------------------------------------------------------------------
 -spec(status_change(console_arg(), status()) -> no_return()).
 status_change(Arg, ToStatus) ->
-    {Entries,_DP} =
+    {Entries,_DataPoint} =
         case ToStatus of
             enabled  -> find_entries(sanitise_stat_input(Arg, '_', disabled));
             disabled -> find_entries(sanitise_stat_input(Arg, '_', enabled))
@@ -107,8 +108,8 @@ status_change(Arg, ToStatus) ->
 %%%-----------------------------------------------------------------------------
 -spec(reset_stat(console_arg()) -> ok).
 reset_stat(Arg) ->
-    {Found, _DPs} = find_entries(sanitise_stat_input(Arg)),
-    lists:foreach(fun({N,_,_}) -> exometer:reset(N) end, Found).
+    {Found, _DataPoints} = find_entries(sanitise_stat_input(Arg)),
+    lists:foreach(fun({Name,_,_}) -> exometer:reset(Name) end, Found).
 
 %%%-----------------------------------------------------------------------------
 %% @doc enabling the metadata allows the stats configuration to be persisted,
@@ -153,8 +154,8 @@ metadata_env(Status) ->
 %%%-----------------------------------------------------------------------------
 %%% @doc
 %%% Arguments coming in from the console arrive at this function for stats, data
-%%% is transformed into a metrics name and type status/datapoints if
-%%% they have been given.
+%%% is transformed into a metrics name and type status/datapoints if they have
+%%% been given.
 %%% @end
 %%%-----------------------------------------------------------------------------
 -spec(sanitise_stat_input(console_arg()) -> sanitised_stat()).
@@ -175,8 +176,8 @@ sanitise_stat_input(Arg, Type, Status) ->
     parse_stat_entry(check_args(Arg), Type,  Status, ?DPs).
 
 %%%-----------------------------------------------------------------------------
-%% @doc make sure all Args are Binaries in a list: [<<Args>>]
-%% sanitised for parse_stat_entry @end
+%% @doc make sure all Args are Binaries in a list: [<<Args>>] sanitised for
+%% parse_stat_entry @end
 %%%-----------------------------------------------------------------------------
 check_args([Args]) when is_atom(Args) ->
     check_args(atom_to_binary(Args, latin1));
@@ -223,7 +224,7 @@ type_status_and_dps([<<"type=", T/binary>> | Rest], _T,Status,DPs) ->
                 end
         end,
     type_status_and_dps(Rest, NewType, Status, DPs);
-type_status_and_dps([<<"status=", S/binary>> | Rest],Type,_St,DPs) ->
+type_status_and_dps([<<"status=", S/binary>> | Rest],Type,_Status,DPs) ->
     NewStatus =
         case S of
             <<"*">> -> '_';
@@ -267,7 +268,7 @@ merge([], DPs) ->
 
 %% @doc creates a path for the stat name @end
 statname([]) ->
-    [?PREFIX] ++ '_' ;
+    ['_'] ;
 statname("*") ->
     statname([]);
 statname("["++_ = Expr) ->
@@ -391,7 +392,7 @@ find_stats_info({Name,Type,Status}, Info) ->
     print_stat_args({Name,Type,Status,Info},Folded).
 
 get_info_2(Statname,Attrs) ->
-    fold_values([stats:get_info(Statname,Attrs)]).
+    fold_values([exometer:info(Statname,Attrs)]).
 
 print_stat_args(_StatName, []) -> [];
 print_stat_args(StatName, disabled) ->
@@ -458,9 +459,53 @@ load_profile(ProfileName,Node) ->
 
 -spec(load_profile_all(stats_persist:profilename()) -> no_return()).
 load_profile_all(ProfileName) ->
+    ConcatStrName = sanitise_profile_input(ProfileName),
     Nodes = [node()|nodes()],
-    load_profile(ProfileName,Nodes).
+    load_profile(ConcatStrName,Nodes).
 
+-spec(get_profile(stats_persist:profile_name()) -> no_return()).
+get_profile(ProfileName) ->
+    ConcatStrName = sanitise_profile_input(ProfileName),
+    print_profile("Found",
+        case profile_enabled() of
+            true ->
+                stats_profiles:get_profile(ConcatStrName);
+            False ->
+                {False, ConcatStrName}
+        end).
+
+-spec(get_all_profiles() -> no_return()).
+get_all_profiles() ->
+    print_profile("Found",
+        case profile_enabled() of
+        true ->
+            {ok, [Profile ||
+                {Profile, _Stats} <- stats_profiles:get_all_profiles()]};
+        False ->
+            {False, " "}
+    end).
+
+-spec(get_all_loaded_profiles() -> no_return()).
+get_all_loaded_profiles() ->
+    print_profile("Found",
+        case profile_enabled() of
+            true ->
+                Nodes = [node()|nodes()],
+                {ok, [get_loaded_profile(Node) || Node <- Nodes]};
+            False ->
+                {False, " "}
+        end).
+
+get_loaded_profile() ->
+    get_loaded_profile(node()).
+get_loaded_profile(Node) ->
+    print_profile("Found",
+        case profile_enabled() of
+            true ->
+                {ok, stats_profiles:get_loaded_profile(Node)};
+            False ->
+                {False, " "}
+        end).
 
 -spec(delete_profile(stats_persist:profilename()) -> no_return()).
 delete_profile(ProfileName) ->
@@ -477,12 +522,13 @@ delete_profile(ProfileName) ->
 reset_profile() ->
     reset_profile([node()]).
 reset_profile(Nodes) ->
+    print_profile("Reset",
     case profile_enabled() of
         true ->
-            print_profile("Reset",stats_profiles:reset_profile(Nodes));
+            stats_profiles:reset_profile(Nodes);
         False ->
             {False," "}
-    end.
+    end).
 
 reset_profile_all() ->
     reset_profile([node()|nodes()]).
@@ -533,42 +579,39 @@ setdown(ListofArgs) ->
 %%------------------------------------------------------------------------------
 -spec(sanitise_push_input(console_arg()) -> {protocol(),sanitised_push()}).
 sanitise_push_input(ListofArgs) ->
-    lists:foldl(
-        fun
-        %% Protocol specified
-            ("tcp", {_ProAcc,{{PortAcc,InAcc,HostAcc},StatAcc}}) ->
-                {tcp,{{PortAcc,InAcc,HostAcc},StatAcc}};
-            ("udp", {_ProAcc,{{PortAcc,InAcc,HostAcc},StatAcc}}) ->
-                {udp,{{PortAcc,InAcc,HostAcc},StatAcc}};
-            %% Find the Host and Port
-            (HostPortOrNot, {ProAcc,{{PortAcc,InAcc,HostAcc},StatAcc}}) ->
-                case host_port(HostPortOrNot) of
-                    {NoHost, []} ->
-                        case string:find(NoHost, ".") of
-                            nomatch -> %% Then its instance
-                                TheInstance = NoHost,
-                                {ProAcc,{{PortAcc,TheInstance,HostAcc},StatAcc}};
-                            _ -> %% Its a stat request
-                                AStats = NoHost,
-                                {TheStats,_,_,_} = sanitise_stat_input([AStats]),
-                                {ProAcc,{{PortAcc,InAcc,HostAcc},TheStats}}
-                        end;
-                    {AHost,APort} ->
-                        TheHost = hostname(AHost),
-                        ThePort = port(APort),
-                        {ProAcc,{{ThePort,InAcc,TheHost},StatAcc}}
-                end
-        end, {'_',{{'_','_','_'},'_'}}, ListofArgs).
+     case list_to_tuple(ListofArgs) of
+         {HostPort, Protocol, Instance} ->
+             sanitise_push(HostPort, Protocol, Instance, ['_']);
+         {HostPort, Protocol, Instance, Stats} ->
+             sanitise_push(HostPort, Protocol, Instance, Stats);
+         _ -> lager:error("Invalid number of Arguments")
+     end.
 
-host_port(HostPort) ->
+sanitise_push(HostPort, Protocol, Instance, Stats) ->
+    {Host0, Port0} = get_host_port(HostPort),
+    TheHost = get_host(Host0),
+    ThePort = get_port(Port0),
+    TheProtocol = list_to_atom(Protocol),
+    TheInstance = Instance,
+    TheStats = sanitise_stat_input(Stats),
+    {TheProtocol, {{ThePort,TheInstance,TheHost}, TheStats}}.
+
+get_host_port(HostPort) ->
     [Host|Port] = re:split(HostPort,"\\:",[{return,list}]),
     {Host,Port}.
 
-hostname([Host]) -> hostname(Host);
-hostname(Host) -> list_to_atom(Host).
+get_host(Host) ->
+    case string:find(Host, ".") of
+        nomatch -> %% not ip address
+            Hostname = Host,
+            Hostname;
+        _ -> % It is an ip address
+            IpAddr = stats_push_util:ip_maker(Host),
+            IpAddr %% made into ipv4 address (tuple)
+    end.
 
-port([Port]) -> port(Port);
-port(Port) -> list_to_integer(Port).
+get_port([Port]) -> get_port(Port);
+get_port(Port) -> list_to_integer(Port).
 
 
 %%%-----------------------------------------------------------------------------
@@ -656,7 +699,7 @@ integers_to_strings(IntegerList) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Other Functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec(print(atom()|string()|list()|{listofstats(),datapoints()}) -> print()).
+-spec(print(atom()|string()|list()|{found_stats(),any()}) -> term()).
 print(undefined)   -> print([]);
 print([undefined]) -> print([]);
 print({Stats,DPs}) -> print(Stats,DPs);

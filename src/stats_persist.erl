@@ -46,7 +46,7 @@ enabled() ->
 %%%-----------------------------------------------------------------------------
 -spec(reload_metadata() -> no_return()).
 reload_metadata() ->
-    Stats = stats:find_entries([[riak]],'_'),
+    Stats = stats:find_entries([['_']],'_'),
     change_status([{Stat, Status} || {Stat, _Type, Status} <- Stats]).
 
 %%%-----------------------------------------------------------------------------
@@ -196,8 +196,8 @@ register(StatName, Type, Opts, Aliases) ->
 -spec(re_register(metricname(), tuple_stat()) -> ok).
 re_register(StatName,{Status,Type,Options,Aliases}) ->
     StatMap = ?STAT_MAP,
-    Value = StatMap#{status => Status,
-                     type => Type,
+    Value = StatMap#{status  => Status,
+                     type    => Type,
                      options => Options,
                      aliases => Aliases},
     re_register(StatName,Value);

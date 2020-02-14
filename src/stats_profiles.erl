@@ -68,18 +68,19 @@
 -module(stats_profiles).
 
 %% API
--export([save_profile/1, load_profile/2, delete_profile/1, reset_profile/1]).
+-export([save_profile/1, load_profile/2, delete_profile/1, reset_profile/1,
+         get_profile/1, get_all_profiles/0, get_loaded_profile/1]).
 
 -define(PROFILE_PREFIX,           {profiles, list}).
--define(PROFILE_KEY(Profile),     ?PROFILE_PREFIX, Profile}).
+-define(PROFILE_KEY(Profile),     {?PROFILE_PREFIX, Profile}).
 
 -define(LOADED_PREFIX,            {profiles, loaded}).
 -define(LOADED_PKEY,              {?LOADED_PREFIX, node()}).
 -define(LOADED_PKEY(Key),         {?LOADED_PREFIX, Key}).
 
--type profilename() :: [string()].
+-type profile_name() :: [string()].
 
--export_type([profilename/0]).
+-export_type([profile_name/0]).
 
 %% -----------------------------------------------------------------------------
 %% @doc
@@ -87,7 +88,7 @@
 %% status as the value; multiple saves of the same name overwrites the profile
 %% @end
 %% -----------------------------------------------------------------------------
--spec(save_profile(profilename()) -> {(ok | error()), profilename()}).
+-spec(save_profile(profile_name()) -> {(ok | {error, term()}), profile_name()}).
 save_profile(ProfileName) ->
     Stats = stats_persist:get_all_stats(),
     {stats_persist:put(?PROFILE_PREFIX,ProfileName,Stats), ProfileName}.
@@ -99,14 +100,12 @@ save_profile(ProfileName) ->
 %% that need changing to prevent errors/less expense
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(load_profile(profilename(),[node()]) ->
-                                       {(ok | {error, term()}), profilename()}).
+-spec(load_profile(profile_name(),[node()]) ->
+                                      {(ok | {error, term()}), profile_name()}).
 load_profile(ProfileName,Nodes) ->
-    ProfileKey = ?PROFILE_KEY(ProfileName),
     Response =
-        case stats_persist:check_meta(ProfileKey) of
-            [] -> {error, not_found};
-            unregistered -> {error, deleted};
+        case get_profile(ProfileName) of
+            {error, Reason} -> {error, Reason};
             SavedStats ->
                 CurrentStats = stats_persist:get_all_stats(),
                 ToChange = SavedStats -- CurrentStats,
@@ -130,17 +129,44 @@ load_profile(ProfileName,Nodes) ->
     {Response, ProfileName}.
 
 %%%-----------------------------------------------------------------------------
+%% @doc Find the profile in the metadata @end
+%%%-----------------------------------------------------------------------------
+-spec(get_profile(profile_name()) -> {(list()|{error, term()}),profile_name()}).
+get_profile(ProfileName) ->
+    ProfileKey = ?PROFILE_KEY(ProfileName),
+    Response =
+        case stats_persist:check_meta(ProfileKey) of
+            []            -> {error, not_found};
+            unregistered  -> {error, deleted};
+            _ProfileValue -> ok
+        end,
+    {Response, ProfileName}.
+
+%%%-----------------------------------------------------------------------------
+%% @doc List of all the profiles in the metadata @end
+%%%-----------------------------------------------------------------------------
+-spec(get_all_profiles() -> list()).
+get_all_profiles() -> stats_persist:get_all(?PROFILE_PREFIX).
+
+%%%-----------------------------------------------------------------------------
+%% @doc List of the profile currently loaded on the node @end
+%%%-----------------------------------------------------------------------------
+-spec(get_loaded_profile(node()) -> {profile_name(), atom()}).
+get_loaded_profile(Node) ->
+    Profile = stats_persist:get(?LOADED_PREFIX, Node),
+    {Profile, Node}.
+
+%%%-----------------------------------------------------------------------------
 %% @doc
 %% deletes the profile from the metadata and all its values but it does not
 %% affect the status of the stats.
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(delete_profile(profilename()) -> {(ok | {error, term()}), profilename()}).
+-spec(delete_profile(profile_name()) -> {(ok |{error,term()}), profile_name()}).
 delete_profile(ProfileName) ->
     Response =
-        case stats_persist:check_meta(?PROFILE_KEY(ProfileName)) of
-            []           -> {error, doesnt_exist};
-            unregistered -> {error, deleted};
+        case get_profile(ProfileName) of
+            {error, Reason} -> {error, Reason};
             _  ->
                 OnAllNodes = [node()|nodes()],
                 %% unload the profile on all nodes if it is loaded.
@@ -164,7 +190,7 @@ unload_profile(ProfileName, Node) ->
 %%%-----------------------------------------------------------------------------
 %% @doc resets the profile and enable all the disabled stats. @end
 %%%-----------------------------------------------------------------------------
--spec(reset_profile([node()]) -> {(ok | error()), profilename()}).
+-spec(reset_profile([node()]) -> {(ok | {error, term()}), profile_name()}).
 reset_profile(Nodes) ->
     %% get list of profiles unloaded and the nodes.
     Profiles =

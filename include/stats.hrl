@@ -5,17 +5,16 @@
 -define(APP,                  stats).
 -define(PERSIST_APP,          cluster_metadata).
 -define(PERSIST_ENV,          metadata_enabled).
--define(INFO_STAT,     [name,type,module,value,cache,status,timestamp,options]).
+-define(INFO_STAT,            [name,type,module,value,cache,
+                               status,timestamp,options]).
 %%                      attributes for all the metrics stored in exometer
 
 %%%-----------------------------------------------------------------------------
 %%% @doc Stats @end
 %%%-----------------------------------------------------------------------------
 
--define(PREFIX,         application:get_env(?APP, prefix, ?APP)).
-
 -type app()             :: atom().
--type metrics()         :: [metricname()].
+-type metrics()         :: [metricname()] | [[metricname()]].
 -type metricname()      :: [atom()] | [list()].
 
 -export_type([metrics/0]).
@@ -36,7 +35,7 @@
 %%% @doc Console @end
 %%%-----------------------------------------------------------------------------
 
--type console_arg()     ::  [string()].
+-type console_arg()     :: [string()].
 -type sanitised_stat()  :: {metricname(),status(),type(),any()}.
 -type attributes()      :: [info()] | [].
 
@@ -50,4 +49,4 @@
 
 -type stat_info()       :: [{info(),values()}] | [].        %% [{value,0}...]
 -type info()            :: name | type | module | value | cache| status
-                           | timestamp | options | ref | datapoints | entry.
+                         | timestamp | options | ref | datapoints | entry.

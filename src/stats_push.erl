@@ -5,28 +5,29 @@
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(stats_push).
+-include("stats.hrl").
 -include("stats_push.hrl").
 
 %% API
 -export([maybe_start_server/2, terminate_server/2, store_setup_info/3,
-    fold_through_meta/3,find_push_stats/2]).
+         fold_through_meta/3, find_push_stats/2]).
 
 -define(NEW_MAP,#{original_dt => calendar:universal_time(),
-    modified_dt => calendar:universal_time(),
-    pid => undefined,
-    running => true,
-    node => node(),
-    port => undefined,
-    server_ip => undefined,
-    stats => ['_']}).
+                  modified_dt => calendar:universal_time(),
+                  pid => undefined,
+                  running => true,
+                  node => node(),
+                  port => undefined,
+                  host => undefined,
+                  stats => ['_']}).
 
--define(PUT_MAP(Pid,Port,Server,Stats,Map),Map#{pid => Pid,
-    port => Port,
-    server_ip => Server,
-    stats => Stats}).
+-define(PUT_MAP(Pid,Port,Server,Stats,Map),Map#{pid   => Pid,
+                                                port  => Port,
+                                                host  => Server,
+                                                stats => Stats}).
 
 -define(STAT_MAP(Map), Map#{modified_dt => calendar:universal_time(),
-    running => true}).
+                            running => true}).
 
 %%%=============================================================================
 %%% API
@@ -40,26 +41,26 @@
 %% @end
 %%%-----------------------------------------------------------------------------
 -spec(maybe_start_server(protocol(),sanitised_push()) -> ok | no_return()).
-maybe_start_server(Protocol, {{Port, Instance,Sip},'_'}) ->
-    maybe_start_server(Protocol, {{Port,Instance,Sip},['_']});
-maybe_start_server(Protocol, {{Port,Instance,Sip},Stats}) ->
+maybe_start_server(Protocol, {{Port, Instance,Host},'_'}) ->
+    maybe_start_server(Protocol, {{Port,Instance,Host},['_']});
+maybe_start_server(Protocol, {{Port,Instance,Host},Stats}) ->
     case fold_through_meta(Protocol,{{'_',Instance,'_'},'_'}, [node()]) of
         [] ->
-            Pid = start_server(Protocol,{{Port,Instance,Sip},Stats}),
-            MapValue = ?PUT_MAP(Pid,Port,Sip,Stats,?NEW_MAP),
+            Pid = start_server(Protocol,{{Port,Instance,Host},Stats}),
+            MapValue = ?PUT_MAP(Pid,Port,Host,Stats,?NEW_MAP),
             store_setup_info({Protocol, Instance},MapValue,new);
         Servers ->
-            maybe_start_server(Servers,Protocol,{{Port,Instance,Sip},Stats})
+            maybe_start_server(Servers,Protocol,{{Port,Instance,Host},Stats})
     end.
-maybe_start_server(ServersFound,Protocol,{{Port,Instance,Sip},Stats}) ->
+maybe_start_server(ServersFound,Protocol,{{Port,Instance,Host},Stats}) ->
     lists:foreach(
         fun
             ({{_Pr,_In}, #{running := true}}) ->
                 io:fwrite("Server of that instance is already running~n");
             ({{_Pr,_In}, #{running := false} = ExistingMap}) ->
                 Pid =
-                    start_server(Protocol, {{Port, Instance, Sip}, Stats}),
-                MapValue = ?PUT_MAP(Pid,Port,Sip,Stats,ExistingMap),
+                    start_server(Protocol, {{Port, Instance, Host}, Stats}),
+                MapValue = ?PUT_MAP(Pid,Port,Host,Stats,ExistingMap),
                 store_setup_info({Protocol, Instance}, MapValue, existing)
         end, ServersFound).
 
@@ -67,8 +68,7 @@ maybe_start_server(ServersFound,Protocol,{{Port,Instance,Sip},Stats}) ->
 start_server(Protocol, Arg) ->
     stats_push_sup:start_server(Protocol, Arg).
 
--spec(store_setup_info(push_key(),push_value(), (new | existing))
-                                                     -> ok | print() | error()).
+-spec(store_setup_info(push_key(),push_value(), (new | existing)) -> ok).
 store_setup_info({_Key,_Instance},
     #{pid := NotPid}, _Type) when is_pid(NotPid) == false -> ok;
 store_setup_info(Key, MapValues, new) ->
@@ -84,8 +84,8 @@ store_setup_info(Key, MapValues = #{running := _Bool}, existing) ->
 %% @end
 %%%-----------------------------------------------------------------------------
 -spec(terminate_server(protocol(), sanitised_push()) -> no_return()).
-terminate_server(Protocol, {{Port, Instance, Sip},Stats}) ->
-    stop_server(fold(Protocol, Port, Instance, Sip, Stats, node())).
+terminate_server(Protocol, {{Port, Instance, Host},Stats}) ->
+    stop_server(fold(Protocol, Port, Instance, Host, Stats, node())).
 
 stop_server(ChildrenInfo) ->
     lists:foreach(
@@ -94,8 +94,8 @@ stop_server(ChildrenInfo) ->
             stats_persist:put(?PUSH_PREFIX,
                 {Protocol, Instance},
                 MapValue#{modified_dt => calendar:universal_time(),
-                    pid => undefined,
-                    running => false})
+                          pid => undefined,
+                          running => false})
         end, ChildrenInfo).
 
 %%%-----------------------------------------------------------------------------
@@ -111,39 +111,39 @@ find_push_stats(Nodes,{Protocol, SanitisedData}) ->
 
 
 -spec(fold_through_meta(protocol(),sanitised_push(),[node()]) -> [push_arg()]).
-fold_through_meta(Protocol, {{Port, Instance, ServerIp}, Stats}, Nodes) ->
-    fold_through_meta(Protocol,Port,Instance,ServerIp,Stats,Nodes).
-fold_through_meta(Protocol, Port, Instance, ServerIp, Stats, Nodes) ->
-    lists:flatten(
-        [fold(Protocol, Port, Instance, ServerIp, Stats, Node)
-            || Node <- Nodes]).
+fold_through_meta(Protocol, {{Port, Instance, Host}, Stats}, Nodes) ->
+    fold_through_meta(Protocol,Port,Instance,Host,Stats,Nodes).
+fold_through_meta(Protocol, Port, Instance, Host, Stats, Nodes) ->
+    lists:map(fun(Node) ->
+        fold(Protocol, Port, Instance, Host, Stats, Node)
+             end, Nodes).
 
--spec(fold(protocol(),port(),instance(),server_ip(),metrics(),node()) ->
+-spec(fold(protocol(),port(),instance(),host(),metrics(),node()) ->
     [push_arg()]).
-fold(Protocol, Port, Instance, ServerIp, Stats, Node) ->
-    {Return, Port, ServerIp, Stats, Node} =
+fold(Protocol, Port, Instance, Host, Stats, Node) ->
+    {Return, Port, Host, Stats, Node} =
         cluster_metadata:fold(
             fun
                 ({{MProtocol, MInstance},   %% Key would be the same
                     [#{node := MNode,
                        port := MPort,
-                       server_ip := MSip,
+                       host := MHost,
                        stats := MStats} = MapValue]},
 
-                    {Acc, APort, AServerIP, AStats, ANode}) %% Acc and Guard
+                    {Acc, APort, AHost, AStats, ANode}) %% Acc and Guard
                     when (APort     == MPort  orelse APort     == '_')
-                    and  (AServerIP == MSip   orelse AServerIP == '_')
+                    and  (AHost     == MHost  orelse AHost     == '_')
                     and  (ANode     == MNode  orelse ANode     == node())
                     and  (AStats    == MStats orelse AStats    == '_') ->
                     %% Matches all the Guards given in Acc
                     {[{{MProtocol,MInstance}, MapValue} | Acc],
-                        APort, AServerIP, AStats,ANode};
+                        APort, AHost, AStats,ANode};
 
                 %% Doesn't Match Guards above
                 ({_K, _V}, {Acc, APort, AServerIP,AStats,ANode}) ->
                     {Acc, APort, AServerIP,AStats,ANode}
             end,
-            {[], Port, ServerIp, Stats, Node}, %% Accumulator
+            {[], Port, Host, Stats, Node}, %% Accumulator
             ?PUSH_PREFIX, %% Prefix to Iterate over
             [{match, {Protocol, Instance}}] %% Key to Object match
         ),

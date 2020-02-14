@@ -23,5 +23,7 @@
                         ]}
                     ]}
                 ]}
-            ]}
+            ]},
+            %% Cache defaults
+            {cache_default, 5000}
         ]}.

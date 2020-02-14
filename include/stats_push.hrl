@@ -1,12 +1,26 @@
 %%%-----------------------------------------------------------------------------
-%%% @doc MACROS and type specific for the push fnuctionality. @end
+%%% @doc MACROS and type specific for the push functionality. @end
 %%%-----------------------------------------------------------------------------
 -define(PUSH_PREFIX, {stats_push, node()}).
 
+-define(REFRESH_INTERVAL,       30000).
+-define(SPIRAL_TIME_SPAN,       1000).
+-define(HISTOGRAM_TIME_SPAN,    1000).
+-define(STATS_LISTEN_PORT,      9000).
+-define(STATS_UPDATE_INTERVAL,  1000).
+
+-define(BUFFER,                 {buffer,    100*1024*1024}).
+-define(SNDBUF,                 {sndbuf,      5*1024*1024}).
+-define(ACTIVE,                 {active,    true}).
+-define(REUSE,                  {reuseaddr, true}).
+
+-define(OPTIONS,                [?BUFFER, ?SNDBUF, ?ACTIVE, ?REUSE]).
+
 -type protocol()        :: tcp | udp | '_'.
 -type instance()        :: string().
--type server_ip()       :: inet:ip4_address() | any().
--type sanitised_push()  :: {{port(), instance(), server_ip()}, stats:metrics()}.
+-type socket()          :: inet:socket().
+-type host()            :: inet:hostname() | inet:ip4_address().
+-type sanitised_push()  :: {{port(), instance(), host()}, stats:metrics()}.
 
 -type runnning_tuple()  :: {running, boolean()}.
 
@@ -18,7 +32,7 @@
                             runnning_tuple(),
                             node(),
                             port(),
-                            server_ip(),
+                            host(),
                             stats:metrics()} | push_map() | atom().
 -type push_map()        :: #{original_dt := calendar:datetime(),
                              modified_dt  := calendar:datetime(),
@@ -26,5 +40,5 @@
                              running      := (true | false),
                              node         := node(),
                              port         := port(),
-                             server_ip    := server_ip(),
+                             server_ip    := host(),
                              stats        := stats:metrics()}.
