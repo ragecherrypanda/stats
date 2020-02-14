@@ -9,7 +9,7 @@
 
 %% API
 -export([
-    register/2, get_stats/1, find_entries/2, stats/0, app_stats/1, get_value/1,
+    register/1, get_stats/1, find_entries/2, stats/0, app_stats/1, get_value/1,
     get_values/1, get_info/1, find_stats_info/2, update/3, unregister/1,
     change_status/1, reset/1, timestamp/0]).
 
@@ -18,7 +18,7 @@
 %%%=============================================================================
 %%% API
 %%%=============================================================================
-%%%----------------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 %%% @doc
 %%% For registration the stats call into this module to become an uniform format
 %%% in a list to be "re-registered" in the metadata and in exometer. Unless the
@@ -30,27 +30,17 @@
 %%% Metadata does not persist the stats values.
 %%% @end
 %%%-----------------------------------------------------------------------------
--spec(register(app(), metrics()) -> ok | no_return()).
-register(App, Stats) ->
+-spec(register(metrics()) -> ok | no_return()).
+register(Stats) ->
     lists:foreach(fun
-        ({Name,Type})                -> register_(App,Name,Type,[],[]);
-        ({Name,Type,Option})         -> register_(App,Name,Type,Option,[]);
-        ({Name,Type,Option,Aliases}) -> register_(App,Name,Type,Option,Aliases)
+        ({Name,Type})                -> register_(Name,Type,[],[]);
+        ({Name,Type,Option})         -> register_(Name,Type,Option,[]);
+        ({Name,Type,Option,Aliases}) -> register_(Name,Type,Option,Aliases)
                   end, Stats).
 
-register_(App, Name, Type, Options, Aliases) ->
-    StatName   = stat_name(?PREFIX, App, Name),
+register_(Name, Type, Options, Aliases) ->
     NewOptions = add_cache(Options),
-    register_stats({StatName, Type, NewOptions, Aliases}).
-
-%% All stats in App are appended onto the prefix
-stat_name(Prefix, App, Name) when is_atom(Name) ->
-    stat_name_([Prefix, App, Name]);
-stat_name(Prefix, App, Name) when is_list(Name) ->
-    stat_name_([Prefix, App | Name]).
-
-stat_name_([P, [] | Rest]) -> [P | Rest];
-stat_name_(N) -> N.
+    register_stats({Name, Type, NewOptions, Aliases}).
 
 add_cache(Options) ->
     %% look for cache value in stat, if undefined - add cache option
@@ -340,24 +330,14 @@ update(Name, Val, Type, Opts) ->
 %%%-----------------------------------------------------------------------------
 %% @doc unregister a stat in metadata, and deletes the metric from exometer @end
 %%%-----------------------------------------------------------------------------
--spec(unregister({app(),Idx :: term(),type(),app()} | metricname()) ->
-    ok | error()).
-unregister({Mod, Idx, Type, App}) -> %% specific to riak_core vnode
-    unregister_vnode(App, Mod, Idx, Type);
+-spec(unregister(metricname()) -> ok | error()).
 unregister([Stats|Name]) when is_atom(Stats) ->
     unregister_stat([Stats|Name]);
 unregister(Stats) -> %% generic
     lists:foreach(fun(Stat) -> unregister_stat(Stat) end, Stats).
 
-unregister_vnode(App, Mod, Idx, Type) ->
-    unregister_stat(?PREFIX, App, Type, Mod, Idx).
-
 unregister_stat(StatName) ->
     unreg_stats(StatName).
-unregister_stat(Prefix, App, Type, [Op, time], Index) ->
-    unreg_stats([Prefix, App, Type, Op, time, Index]);
-unregister_stat(Prefix, App, Type, Mod, Index) ->
-    unreg_stats([Prefix, App, Type, Mod, Index]).
 
 unreg_stats(StatName) ->
     case stats_persist:enabled() of

@@ -4,6 +4,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(stats_push_util).
+-include("stats.hrl").
 -include("stats_push.hrl").
 
 -export([
@@ -13,10 +14,6 @@
     json_stats/1,
     get_stats/1]).
 
-%
-%%%===================================================================
-%%% Data API
-%%%===================================================================
 
 %%%-------------------------------------------------------------------
 %% @doc
@@ -24,9 +21,9 @@
 %% for both riak_stat_push_tcp/udp and riak_stat_wm.
 %% @end
 %%%-------------------------------------------------------------------
--spec(get_stats(pusharg()) -> jsonstats()).
+-spec(get_stats(push_arg()) -> term()).
 get_stats(Arg) ->
-    Stats = riak_core_stats_mgr:get_values(Arg),
+    Stats = stats:get_values(Arg),
     lists:map(fun({N,V}) ->
         NewName = parse_name(N),
         NewValues = parse_values(V),
@@ -87,7 +84,7 @@ parse_values(Values) ->
 %% stats from get_stats/1 and convert them to json objects
 %% @end
 %%%-------------------------------------------------------------------
--spec(json_stats(listofstats()) -> jsonstats()).
+-spec(json_stats(found_stats()) -> any()).
 json_stats(Stats) ->
     Metrics = get_stats(Stats),
     JsonStats = encode(Metrics),
