@@ -99,7 +99,8 @@ save_profile(ProfileName) ->
 %% that need changing to prevent errors/less expense
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(load_profile(profilename(),[node()]) -> {(ok | error()), profilename()}).
+-spec(load_profile(profilename(),[node()]) ->
+                                       {(ok | {error, term()}), profilename()}).
 load_profile(ProfileName,Nodes) ->
     ProfileKey = ?PROFILE_KEY(ProfileName),
     Response =
@@ -134,7 +135,7 @@ load_profile(ProfileName,Nodes) ->
 %% affect the status of the stats.
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(delete_profile(profilename()) -> {(ok | error()), profilename()}).
+-spec(delete_profile(profilename()) -> {(ok | {error, term()}), profilename()}).
 delete_profile(ProfileName) ->
     Response =
         case stats_persist:check_meta(?PROFILE_KEY(ProfileName)) of
