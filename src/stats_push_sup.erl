@@ -1,17 +1,17 @@
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 %%% @doc
 %%% Supervise the TCP and UDP gen_server children that push stats to
 %%% and endpoint given.
 %%% @end
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(stats_push_sup).
 -include("stats_push.hrl").
 
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_server/2, stop_server/1,
-    restart_children/1, stop_running_server/2]).
+-export([start_link/0, start_server/2, stop_server/1, restart_children/1,
+         stop_running_server/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -28,44 +28,42 @@
 -define(TCP_CHILD, stats_push_tcp_serv).
 -define(UDP_CHILD, stats_push_udp_serv).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec(start_link() ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
-%%%-------------------------------------------------------------------
-%% @doc
-%% Start up a gen server for the pushing of stats to an endpoint.
-%% @end
-%%%-------------------------------------------------------------------
--spec(start_server(protocol(),sanitised_push()) -> ok | print() | error()).
+%%%-----------------------------------------------------------------------------
+%% @doc Start up a gen server for the pushing of stats to an endpoint. @end
+%%%-----------------------------------------------------------------------------
+-spec(start_server(protocol(),sanitised_push()) -> ok | no_return()).
 start_server(Protocol, Data) ->
     CHILD   = child_spec(Data,Protocol),
     {Child,Pid} = start_child(CHILD),
     log_and_respond({Child,Pid}),
     Pid.
 
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 %% @doc
 %% Stop the persisting of stats by terminating and deleting the server
 %% pushing the stats to an endpoint
 %% @end
-%%%-------------------------------------------------------------------
--spec(stop_server([pid()] | [atom()] | list()) -> ok | print() | error()).
+%%%-----------------------------------------------------------------------------
+-spec(stop_server([pid()] | [atom()] | list()) -> ok | no_return()).
 stop_server(Child) when is_list(Child) ->
     ChildName = list_to_atom(Child),
     Terminate = supervisor:terminate_child(?MODULE, ChildName),
     Delete    = supervisor:delete_child(?MODULE, ChildName),
     log_and_respond({Child,{Terminate,Delete}}).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Printing API
-%%%===================================================================
+%%%=============================================================================
 
 log_and_respond({Child, Response}) ->
     log(Child, Response),
@@ -81,9 +79,11 @@ log(Child,{Error,_}) ->
 log(Child, Pid) when is_pid(Pid)->
     lager:info("Child started : ~p with Pid : ~p",[Child,Pid]);
 log(Child, attempts_failed) ->
-    lager:info("Attempts to start ~p failed, Exceeded Attempt limit : ~p",[Child,?ATTEMPTS]);
+    lager:info("Attempts to start ~p failed, Exceeded Attempt limit : ~p",
+        [Child,?ATTEMPTS]);
 log(Child, econnrefused) ->
-    lager:error("Child refused to start - Connection refused. Child : ~p",[Child]);
+    lager:error("Child refused to start - Connection refused. Child : ~p",
+        [Child]);
 log(Child, Error) ->
     lager:error("Child refused to start - ~p. Child : ~p",[Error,Child]).
 
@@ -95,20 +95,11 @@ respond(econnrefused) ->
 respond(Error) ->
     io:fwrite("Could not initiate Polling, ~p~n",[Error]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Supervisor callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
-%% this function is called by the new process to find out about
-%% restart strategy, maximum restart frequency and child
-%% specifications.
-%%
-%% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec(init(Args :: term()) ->
     {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
         MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
@@ -127,9 +118,9 @@ init([]) ->
     Children = get_children(),
     {ok, {SupFlags, Children}}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
 restart_children() ->
     %% Get the children that were still running on shutdown.
@@ -139,12 +130,6 @@ restart_children() ->
 
 -type children()        :: [child()].
 -type child()           :: supervisor:child_spec().
-%%%-------------------------------------------------------------------
-%% @doc
-%% Called by riak_stat_push_sup to restart the children that were
-%% running before the node shut down
-%% @end
-%%%-------------------------------------------------------------------
 -spec(restart_children(children()) -> ok).
 restart_children(Children) ->
     restart_children(Children, ?ATTEMPTS, 1).
@@ -207,16 +192,16 @@ store_in_meta(Key,Type) ->
     MapValues = stats_persist:get(?PUSH_PREFIX,Key),
     stats_push:store_setup_info(Key,MapValues,Type).
 
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 %% @doc
 %% Retrieve the information stored in the metadata about any gen_servers
 %% that may have been running before the node was stopped.
 %% @end
-%%%-------------------------------------------------------------------
--spec(get_children() -> listofpush()).
+%%%-----------------------------------------------------------------------------
+-spec(get_children() -> list()).
 get_children() ->
     ListOfKids =
-        riak_core_console:fold_through_meta('_', {{'_', '_', '_'}, '_'},
+        stats_push:fold_through_meta('_', {{'_', '_', '_'}, '_'},
             [node()]),
     lists:foldl(
         fun
@@ -229,11 +214,9 @@ get_children() ->
             (_other,Acc) -> Acc
         end, [], ListOfKids).
 
-%%%-------------------------------------------------------------------
-%% @doc
-%% Create a child spec out of the information given.
-%% @end
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
+%% @doc Create a child spec out of the information given. @end
+%%%-----------------------------------------------------------------------------
 -spec(child_spec(sanitised_push(),protocol()) -> supervisor:child_spec()).
 child_spec(Data,Protocol) ->
     ChildName = server_name(Data),
@@ -256,13 +239,13 @@ server_name({{_,ServerName,_},_}) -> list_to_atom(ServerName).
 mod_name(udp) -> ?UDP_CHILD;
 mod_name(tcp) -> ?TCP_CHILD.
 
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 %% @doc
 %% Start up the gen_server responsible for pushing stats and their values
 %% to an endpoint. Passing in the Data needed.
 %% @end
-%%%-------------------------------------------------------------------
--spec(start_child(supervisor:child_spec()) -> ok | print() | error() | pid()).
+%%%-----------------------------------------------------------------------------
+-spec(start_child(supervisor:child_spec()) -> ok | pid() | term()).
 start_child(Children) when is_list(Children) ->
     [start_child(Child)|| Child <- Children];
 start_child(Child) ->
