@@ -11,7 +11,7 @@
 -export([
     register/1, get_stats/1, find_entries/2, stats/0, app_stats/1, get_value/1,
     get_values/1, get_info/1, find_stats_info/2, update/3, unregister/1,
-    change_status/1, reset/1, timestamp/0]).
+    change_status/1, reset/1, alias/1, aliases_prefix_foldl/0, timestamp/0]).
 
 -define(STAT_CACHE, 5000).
 
@@ -371,6 +371,32 @@ change_mem_status(Stats) ->
 
 -spec(reset(metricname()) -> ok).
 reset(Stat) -> exometer:reset(Stat).
+
+aliases_prefix_foldl() ->
+    exometer_alias:prefix_foldl(<<>>,alias_fun(),orddict:new()).
+
+-spec(alias(Group :: orddict:orddict()) -> ok | acc()).
+alias(Group) ->
+    lists:keysort(
+        1,
+        lists:foldl(
+            fun({K, DPs}, Acc) ->
+                case get_datapoint(K, [D || {D, _} <- DPs]) of
+                    {ok, Vs} when is_list(Vs) ->
+                        lists:foldr(fun({D, V}, Acc1) ->
+                            {_, N} = lists:keyfind(D, 1, DPs),
+                            [{N, V} | Acc1]
+                                    end, Acc, Vs);
+                    Other ->
+                        Val = case Other of
+                                  {ok, disabled} -> undefined;
+                                  _ -> 0
+                              end,
+                        lists:foldr(fun({_, N}, Acc1) ->
+                            [{N, Val} | Acc1]
+                                    end, Acc, DPs)
+                end
+            end, [], orddict:to_list(Group))).
 
 %%%=============================================================================
 %%% Internal API
