@@ -37,7 +37,7 @@
 %%%-----------------------------------------------------------------------------
 
 -type console_arg()     ::  [string()].
--type sanitised_stat()  :: {metricname(),status(),type(),datapoints()}.
+-type sanitised_stat()  :: {metricname(),status(),type(),any()}.
 -type attributes()      :: [info()] | [].
 
 % VALUES
