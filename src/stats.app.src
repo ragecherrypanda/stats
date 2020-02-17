@@ -13,7 +13,7 @@
                         exometer_core,
                         webmachine
                         ]},
-        {mod, {stats, []}},
+        {mod, {stats_app, []}},
         {env,
             [{exometer_defaults,
                 [{['_'], histogram,
