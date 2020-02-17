@@ -24,8 +24,12 @@
 start(_StartType, _StartArgs) ->
     ensure_all_started(),
     case stats_sup:start_link() of
-        {ok, Pid} -> {ok, Pid};
-        Error -> lager:error("Error starting Supervisor: ~p",[Error])
+        {ok, Pid} ->
+            lager:info("stats started up"),
+            {ok, Pid};
+        Error ->
+            lager:error("Error starting Supervisor: ~p",[Error]),
+            Error
     end.
 
 %%------------------------------------------------------------------------------

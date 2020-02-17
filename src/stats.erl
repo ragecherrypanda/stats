@@ -78,7 +78,7 @@ re_register(StatName, Type, Opts, Aliases) ->
 %% stats' as : [{Name, Type, Status}]
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(get_stats(metricname()) -> no_return()).
+-spec(get_stats([[atom()|[any()]]]) -> {found_stats(), list()}).
 get_stats(Path) ->
     find_entries(Path, '_').
 
@@ -262,7 +262,7 @@ stats() -> get_stats([['_']]).
 %% @doc Print all the stats for an app stored in exometer/metadata @end
 %%%-----------------------------------------------------------------------------
 -spec(app_stats(app()) -> no_return()).
-app_stats(App) -> get_stats([[App|'_']]).
+app_stats(App) -> get_stats([[App]++'_']).
 
 %%%-----------------------------------------------------------------------------
 %% @doc
@@ -281,7 +281,7 @@ get_value(Name) -> exometer:get_value(Name).
 %%%-----------------------------------------------------------------------------
 -spec(get_info(app() | metrics()) -> no_return()).
 get_info(Arg) when is_atom(Arg) ->
-    get_info([Arg |'_']); %% assumed arg is the app (atom)
+    get_info([Arg]++'_'); %% assumed arg is the app (atom)
 get_info(Arg) ->
     {Stats, _DataPoints} = get_stats([Arg]),
     print([{Stat, stat_info(Stat)} || {Stat,_Type,_Status} <- Stats]).

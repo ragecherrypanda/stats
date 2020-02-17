@@ -27,10 +27,9 @@ simple_test() ->
 
 
 setup()->
-    stats_test_util:start_up_apps_and_deps(),
-    RandomStats = stats_test_util:random_stats().
+    ok.
 
-cleanup(PidorPids) ->
+cleanup(_PidorPids) ->
     ok.
 
 
