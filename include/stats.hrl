@@ -14,7 +14,7 @@
 %%%-----------------------------------------------------------------------------
 
 -type app()             :: atom().
--type metrics()         :: [metricname()] | [[metricname()]].
+-type metrics()         :: [metricname()] | [[metricname()]] | [[atom()|[any()]]].
 -type metricname()      :: [atom()] | [list()].
 
 -export_type([metrics/0]).
