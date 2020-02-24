@@ -1,0 +1,16 @@
+.eunit/*
+deps/*
+priv/*
+ebin/*
+*.o
+*~
+doc/*
+.local_dialyzer_plt
+nonode@nohost
+_build
+rebar.lock
+.rebar
+.rebar3
+_checkouts/*
+log/*
+erl_crash.dump

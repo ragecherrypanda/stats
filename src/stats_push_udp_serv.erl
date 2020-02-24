@@ -15,11 +15,11 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {socket        :: socket(),
-                port          :: port(),
-                host          :: host(),
-                instance      :: instance(),
-                stats         :: found_stats()}).
+-record(state, {socket  ,
+                port    ,
+                host    ,
+                instance,
+                stats}).
 
 -define(PROTOCOL, udp).
 
@@ -141,7 +141,6 @@ send_after(Interval, Arg) -> erlang:send_after(Interval,self(),Arg).
 %% send to the endpoint. Repeat.
 %% @end
 %%------------------------------------------------------------------------------
--spec(push_stats(socket(),host(),port(),term()) -> no_return()).
 push_stats(Socket, ComponentHostname, Port, Stats) ->
     JsonStats = stats_push_util:json_stats(Stats),
     send(Socket, ComponentHostname, Port, JsonStats).

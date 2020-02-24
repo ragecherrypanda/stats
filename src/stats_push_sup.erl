@@ -41,7 +41,7 @@ start_link() ->
 %%%-----------------------------------------------------------------------------
 %% @doc Start up a gen server for the pushing of stats to an endpoint. @end
 %%%-----------------------------------------------------------------------------
--spec(start_server(protocol(),sanitised_push()) -> ok | no_return()).
+-spec(start_server(protocol(),sanitised_push()) -> pid()).
 start_server(Protocol, Data) ->
     CHILD   = child_spec(Data,Protocol),
     {Child,Pid} = start_child(CHILD),
@@ -67,7 +67,8 @@ stop_server(Child) when is_list(Child) ->
 
 log_and_respond({Child, Response}) ->
     log(Child, Response),
-    respond(Response).
+    respond(Response),
+    ok.
 
 %% @doc second argument is tuple, only provided by stop_server/1 @end
 log(Child,{ok,ok}) -> lager:info("Child Terminated and Deleted : ~p",[Child]);
@@ -102,13 +103,6 @@ respond(Error) ->
 %%%=============================================================================
 
 %%------------------------------------------------------------------------------
--spec(init(Args :: term()) ->
-    {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
-        MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
-        [ChildSpec :: supervisor:child_spec()]
-    }} |
-    ignore |
-    {error, Reason :: term()}).
 init([]) ->
     Strategy = ?STRATEGY,
     Intensity = ?INTENSITY,
@@ -136,8 +130,8 @@ restart_children() ->
 restart_children(Children) ->
     restart_children(Children, ?ATTEMPTS, 1).
 restart_children([], _, _) -> ok;
-restart_children(Children,0,_) -> [log(Child,attempts_failed)
-    || #{id := Child} <- Children],
+restart_children(Children,0,_) ->
+    [log(Child,attempts_failed) || #{id := Child} <- Children],
     Keys = make_key(Children),
     stop_running_server(Keys);
 %% Every 5 attempts double the Delay between attempts
@@ -159,12 +153,12 @@ restarter(Children) ->
                         Acc;
                     ({Child,Pid},Acc) when is_pid(Pid) ->
                         Key = make_key(Child),
-                        store_in_meta(Key,existing),
+                        store_in_meta(Key),
                         log_and_respond({Child,Pid}),
                         Acc;
                     ({Child,_Other},Acc) ->
                         [Child|Acc]
-                end,[],start_child(Children)).
+                end,[],start_children(Children)).
 
 make_key(#{id := Name,modules:=[stats_push_tcp_serv]}) ->
     {tcp,atom_to_list(Name)};
@@ -190,9 +184,9 @@ set_running_false_fun() ->
                 modified_dt => calendar:universal_time()}
     end.
 
-store_in_meta(Key,Type) ->
+store_in_meta(Key) ->
     MapValues = stats_persist:get(?PUSH_PREFIX,Key),
-    stats_push:store_setup_info(Key,MapValues,Type).
+    stats_push:store_setup_info(Key,MapValues).
 
 %%%-----------------------------------------------------------------------------
 %% @doc
@@ -200,7 +194,7 @@ store_in_meta(Key,Type) ->
 %% that may have been running before the node was stopped.
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(get_children() -> list()).
+-spec(get_children() -> [child()]).
 get_children() ->
     ListOfKids =
         stats_push:fold_through_meta('_', {{'_', '_', '_'}, '_'},
@@ -219,7 +213,7 @@ get_children() ->
 %%%-----------------------------------------------------------------------------
 %% @doc Create a child spec out of the information given. @end
 %%%-----------------------------------------------------------------------------
--spec(child_spec(sanitised_push(),protocol()) -> supervisor:child_spec()).
+-spec(child_spec(sanitised_push(),protocol()) -> child()).
 child_spec(Data,Protocol) ->
     ChildName = server_name(Data),
     Module    = mod_name(Protocol),
@@ -247,9 +241,11 @@ mod_name(tcp) -> ?TCP_CHILD.
 %% to an endpoint. Passing in the Data needed.
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(start_child(supervisor:child_spec()) -> ok | pid() | term()).
-start_child(Children) when is_list(Children) ->
-    [start_child(Child)|| Child <- Children];
+-spec(start_children(children()) -> [{child(), pid() | term()}]).
+start_children(Children) ->
+    [start_child(Child)|| Child <- Children].
+
+-spec(start_child(child()) -> {child(), pid() | term()}).
 start_child(Child) ->
     case supervisor:start_child(?MODULE, Child) of
         {ok, Pid}                       -> {Child, Pid};

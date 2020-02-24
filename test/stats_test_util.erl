@@ -13,7 +13,7 @@
 %%% Stat Generator Macros
 -define(TEST_PREFIX,                                                      stat).
 -define(TEST_APPS,                      [main,common,system,server,backend,ui]).
--define(TEST_CACHES,  [N = rand:uniform(10000) || _ <- lists:seq(1,10),N>1000]).
+-define(TEST_CACHES,      [1000,2000,3000,4000,5000,6000,7000,8000,9000,10000]).
 -define(TEST_STATUSES,                         [enabled,disabled,unregistered]).
 -define(TEST_NAMES,        [stat,counter,active,list,down,cpu,mem,level,usage]).
 -define(TEST_TYPES,[histogram, gauge, spiral, counter, duration, fast_counter]).
@@ -67,5 +67,5 @@ pick_random([]) ->
     pick_random([error]);
 pick_random(List) ->
     Number = length(List),
-    Element = random:uniform(Number),
+    Element = rand:uniform(Number),
     element(Element, List).

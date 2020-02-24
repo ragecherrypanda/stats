@@ -4,6 +4,7 @@
 -module(stats_test).
 
 -include_lib("eunit/include/eunit.hrl").
+-compile([export_all]).
 
 simple_test() ->
     ?assert(true).

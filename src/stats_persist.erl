@@ -11,10 +11,11 @@
 %%%-----------------------------------------------------------------------------
 -module(stats_persist).
 -include("stats.hrl").
+-include("stats_push.hrl").
 
--export([enabled/0, reload_metadata/0, find_entries/3,
-    put/3, put/4, get/2, get/3, get_all/1, get_all_stats/0, delete/2,
-    register/1, change_status/1, set_options/2, unregister/1]).
+-export([enabled/0, reload_metadata/0, find_entries/3, check_meta/1,
+         put/3, get/2, get_all/1, get_all_stats/0, delete/2,
+         register/1, change_status/1, set_options/2, unregister/1]).
 
 -define(STAT,                   stats).
 -define(STAT_PREFIX,           {?STAT, node()}).
@@ -24,9 +25,16 @@
                                   options => [],
                                   aliases => []}).
 
--type persist_prefix()     :: {binary() | atom(), binary() | atom()}.
--type persist_key()        :: any().
--type persist_prefix_key() :: {persist_prefix(), persist_key()}.
+-type persist_prefix()      :: {binary() | atom(), binary() | atom()}.
+-type persist_key()         :: any().
+-type persist_prefix_key()  :: {persist_prefix(), persist_key()}.
+
+-type stat_value()          :: #{status  => status(),
+                                 type    => type(),
+                                 options => options(),
+                                 aliases => aliases()} |
+                               {status(),type(),options(),aliases()}.
+-type meta_value()          :: stat_value() | push_value() | list() | function().
 
 %%%=============================================================================
 %%% Main API
@@ -46,8 +54,8 @@ enabled() ->
 %%%-----------------------------------------------------------------------------
 -spec(reload_metadata() -> no_return()).
 reload_metadata() ->
-    Stats = stats:find_entries([['_']],'_'),
-    change_status([{Stat, Status} || {Stat, _Type, Status} <- Stats]).
+    {Stats,_} = stats:find_entries([['_']],'_'),
+    [change_status(Stat, Status) || {Stat, _Type, Status} <- Stats].
 
 %%%-----------------------------------------------------------------------------
 %% @doc
@@ -55,7 +63,7 @@ reload_metadata() ->
 %% out the stats that match the STATUS and TYPE.
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(find_entries(metrics(),status(),type()) -> found_stats()).
+-spec(find_entries(stats(),status(),type()) -> found_stats()).
 find_entries(Stats,Status,Type) ->
     %% This isn't what it looks like, it is not taking every single stat out,
     %% when the data is sanitised for "stat.**.name", it creates a list within
@@ -68,7 +76,7 @@ find_entries(Stats,Status,Type) ->
 %% Pass the StatName into the fold, to match ({match,Stat}) the objects
 %% stored in the metadata, under the Prefix: @see :  ?STAT_PREFIX
 %%%-----------------------------------------------------------------------------
--spec(fold_stat(metrics(),status(),(type() | '_')) -> found_stats()).
+-spec(fold_stat(stats(),status(),type()) -> found_stats()).
 %%%-----------------------------------------------------------------------------
 %% Returns the same as exometer:find_entries ->
 %%          [{Name,Type,Status}|...]
@@ -91,9 +99,7 @@ fold_stat(Stat, Status0, Type0) ->
 %%%-----------------------------------------------------------------------------
 %% @doc Checks the metadata for the pkey provided @end
 %%%-----------------------------------------------------------------------------
--spec(check_meta(metricname() | persist_prefix_key()) -> atom() | list()).
-check_meta(Stat) when is_list(Stat) ->
-    check_meta(?STAT_KEY(Stat));
+-spec(check_meta(stat_name() | persist_prefix_key()) -> meta_value()).
 check_meta({Prefix, Key}) ->
     case get(Prefix, Key) of
         undefined -> % Not found, return empty list
@@ -121,20 +127,16 @@ find_unregister_status(_)                         -> false.
 %%%-----------------------------------------------------------------------------
 %% @doc Put into the metadata @end
 %%%-----------------------------------------------------------------------------
--spec(put(persist_prefix(), persist_key(), any(), options()) -> ok).
+-spec(put(persist_prefix(), persist_key(), meta_value()) -> ok).
 put(Prefix, Key, Value) ->
-    put(Prefix, Key, Value, []).
-put(Prefix, Key, Value, Opts) ->
-    cluster_metadata:put(Prefix, Key, Value, Opts).
+    cluster_metadata:put(Prefix, Key, Value).
 
 %%%-----------------------------------------------------------------------------
 %% @doc Pulls out information from cluster_metadata @end
 %%%-----------------------------------------------------------------------------
--spec(get(persist_prefix(), persist_key()) -> any() | undefined).
+-spec(get(persist_prefix(), persist_key()) -> meta_value() | undefined).
 get(Prefix, Key) ->
-    get(Prefix, Key, []).
-get(Prefix, Key, Opts) ->
-    cluster_metadata:get(Prefix, Key, Opts).
+    cluster_metadata:get(Prefix, Key).
 
 %%%-----------------------------------------------------------------------------
 %% @doc
@@ -142,7 +144,7 @@ get(Prefix, Key, Opts) ->
 %% data stored under that prefix
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(get_all(persist_prefix()) -> any()).
+-spec(get_all(persist_prefix()) -> [persist_prefix_key()]).
 get_all(Prefix) ->
     cluster_metadata:to_list(Prefix).
 
@@ -166,7 +168,7 @@ delete(Prefix, Key) ->
 %% it, and pulls out the options and sends it back to go into exometer_core
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(register(metricname(),type(),options(),aliases()) -> [] | no_return()).
+-spec(register(stat_name(),type(),options(),aliases()) -> [] | options()).
 register({StatName, Type, Opts, Aliases}) ->
     register(StatName, Type, Opts, Aliases).
 register(StatName, Type, Opts, Aliases) ->
@@ -193,7 +195,7 @@ register(StatName, Type, Opts, Aliases) ->
             []
     end.
 
--spec(re_register(metricname(), tuple_stat()) -> ok).
+-spec(re_register(stat_name(), stat_value()) -> ok).
 re_register(StatName,{Status,Type,Options,Aliases}) ->
     StatMap = ?STAT_MAP,
     Value = StatMap#{status  => Status,
@@ -207,7 +209,7 @@ re_register(StatName, Value) ->
 %%%-----------------------------------------------------------------------------
 %% @doc Changes the status of stats in the metadata @end
 %%%-----------------------------------------------------------------------------
--spec(change_status(metricname(), status()) -> [] | {metricname(),status()}).
+-spec(change_status(stat_name(), status()) -> [] | {stat_name(),status()}).
 change_status({StatName, Status}) -> change_status(StatName, Status);
 change_status(Stats) ->
     [change_status(Stat, Status) || {Stat, Status} <- Stats].
@@ -223,15 +225,14 @@ change_status(Statname, ToStatus) ->
 %%%-----------------------------------------------------------------------------
 %% @doc Setting the options in the metadata @end
 %%%-----------------------------------------------------------------------------
--spec(set_options(metricname() | persist_key(), options()) -> ok | no_return()).
+-type stat_info()        :: {stat_name(), stat_value()}.
+-spec(set_options(stat_info(), options() | {atom(), any()}) -> ok).
 set_options(StatInfo, NewOpts) when is_list(NewOpts) ->
     lists:foreach(fun({Key, NewVal}) ->
         set_options(StatInfo, {Key, NewVal})
                   end, NewOpts);
-set_options({Statname, {Status, Type, Opts, Aliases}}, {Key, NewVal}) ->
+set_options({StatName, {Status, Type, Opts, Aliases}}, {Key, NewVal}) ->
     NewOpts = lists:keyreplace(Key, 1, Opts, {Key, NewVal}),
-    set_options(Statname, {Status, Type, NewOpts, Aliases});
-set_options(StatName, {Status, Type, NewOpts, Aliases}) ->
     re_register(StatName, {Status, Type, NewOpts, Aliases}).
 
 
@@ -241,7 +242,7 @@ set_options(StatName, {Status, Type, NewOpts, Aliases}) ->
 %% registers the stats it will be ignored
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(unregister(persist_key()) -> ok).
+-spec(unregister(stat_name()) -> ok).
 unregister(Statname) ->
     case check_meta(?STAT_KEY(Statname)) of
         MapValue = #{status := Status} when Status =/= unregistered ->

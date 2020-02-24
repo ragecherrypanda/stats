@@ -4,8 +4,6 @@
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(stats_push_util).
--include("stats.hrl").
--include("stats_push.hrl").
 
 -export([json_stats/1]).
 
@@ -15,7 +13,6 @@
 %% get_stats/1 and convert them to json objects
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(json_stats(term()) -> list()).
 json_stats(Stats) ->
     JsonStats = encode(get_stats(Stats)),
     DateTime = format_time(os:timestamp()),
@@ -54,7 +51,6 @@ format_time(Now) ->
 %% stats_push_tcp/udp and stats_wm.
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(get_stats(push_arg()) -> list()).
 get_stats(Arg) ->
     Stats = stats:get_values(Arg),
     StringList =

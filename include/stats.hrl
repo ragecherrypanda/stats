@@ -13,40 +13,44 @@
 %%% @doc Stats @end
 %%%-----------------------------------------------------------------------------
 
--type app()             :: atom().
--type metrics()         :: [metricname()] | [[metricname()]] | [[atom()|[any()]]].
--type metricname()      :: [atom()] | [list()].
+-type input_stats()         :: [tuple_stat()].
+-type tuple_stat()          :: {stat_name(), type()}
+                             | {stat_name(), type(), options()}
+                             | {stat_name(), type(), options(), aliases()}.
 
--export_type([metrics/0]).
+-type stat_name()           :: [atom()] | list().
+-type stats()               :: [stat_name()].
+-export_type([stats/0]).
 
--type status()          :: enabled | disabled | unregistered | '_'.
--type type()            :: exometer:type().
+-type type()                :: exometer:type() | '_'.
+-type options()             :: exometer:options().
+-type aliases()             :: [alias()].
+-type alias()               :: exometer_alias:alias().
 
--type found_stats()     :: [{metricname(),type(),status()}]
-                         | [{metricname(),status()}].
--type options()         :: [{atom(), any()}].
--type aliases()         :: [alias()].
--type alias()           :: {atom(),atom()}.
+-type stat_path()           :: [stat_name()] | [atom()].
+-type found_entries()       :: {found_stats(), datapoints()}.
+-type found_stats()         :: [{stat_name(),type(),status()}] | [].
+-type status()              :: enabled | disabled | unregistered | '_'.
+-type datapoints()          :: [atom()] | list() | [].
 
--type tuple_stat()      :: {metricname(),type(),options(),aliases()}
-                         | {atom(),atom()}.
+-type legacy_stat()         :: [{stat_name(),{alias(),list()}}].
+
+-type found_values()        :: [{stat_name(), value() | values()}].
+-type values()              :: [value()].
+-type value()               :: {atom(), any()} | exometer:value().
 
 %%%-----------------------------------------------------------------------------
 %%% @doc Console @end
 %%%-----------------------------------------------------------------------------
 
--type console_arg()     :: [string()].
--type sanitised_stat()  :: {metricname(),status(),type(),any()}.
--type attributes()      :: [info()] | [].
+-type sanitised_stat()      :: {stat_name(),status(),type(),datapoints()}.
 
-% VALUES
+-type console_arg()         :: [string()] | list().
+-type attributes()          :: [info()] | [].
+-type info()                :: exometer:info().
 
--type stat_value()      :: exo_value() | values().
--type exo_value()       :: {ok, values()}.
--type values()          :: [value()] | [] | value().
--type value()           :: integer() | list() | atom() | binary().
--type incrvalue()       :: non_neg_integer() | integer() | float().
+%%%-----------------------------------------------------------------------------
+%%% @doc Profile @end
+%%%-----------------------------------------------------------------------------
 
--type stat_info()       :: [{info(),values()}] | [].        %% [{value,0}...]
--type info()            :: name | type | module | value | cache| status
-                         | timestamp | options | ref | datapoints | entry.
+-type profile_name()        :: console_arg().

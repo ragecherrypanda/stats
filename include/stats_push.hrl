@@ -17,28 +17,19 @@
 -define(OPTIONS,                [?BUFFER, ?SNDBUF, ?ACTIVE, ?REUSE]).
 
 -type protocol()        :: tcp | udp | '_'.
--type instance()        :: string().
+-type instance()        :: string() | '_'.
 -type socket()          :: inet:socket().
--type host()            :: inet:hostname() | inet:ip4_address().
--type sanitised_push()  :: {{port(), instance(), host()}, stats:metrics()}.
-
--type runnning_tuple()  :: {running, boolean()}.
+-type host()            :: inet:hostname() | inet:ip4_address() |undefined |'_'.
+-type sanitised_push()  :: {{port()|'_',instance(),host()},stats:stats()|['_']}.
 
 -type push_arg()        :: {push_key(),push_value()} | list().
 -type push_key()        :: {protocol(),instance()}.
--type push_value()      :: {calendar:datetime(),
-                            calendar:datetime(),
-                            pid(),
-                            runnning_tuple(),
-                            node(),
-                            port(),
-                            host(),
-                            stats:metrics()} | push_map() | atom().
--type push_map()        :: #{original_dt := calendar:datetime(),
+-type push_value()      ::  push_map() | atom().
+-type push_map()        :: #{original_dt  := calendar:datetime(),
                              modified_dt  := calendar:datetime(),
-                             pid          := pid(),
-                             running      := (true | false),
+                             pid          := pid() | undefined,
+                             running      := true | false,
                              node         := node(),
-                             port         := port(),
-                             server_ip    := host(),
-                             stats        := stats:metrics()}.
+                             port         := port() | undefined,
+                             host         := host(),
+                             stats        := stats:stats() | ['_']}.

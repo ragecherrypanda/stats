@@ -121,7 +121,8 @@ reset_stat(Arg) ->
 %% before will not be loaded upon re-enabling to prevent errors
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(stat_metadata([string()]) -> ok).
+-type metadata_arg() :: list() | enabled | disabled | status.
+-spec(stat_metadata(metadata_arg()) -> ok).
 stat_metadata(["enable" ]) -> stat_metadata(enabled);
 stat_metadata(["disable"]) -> stat_metadata(disabled);
 stat_metadata(["status" ]) -> stat_metadata(status);
@@ -333,8 +334,7 @@ split([], _, Acc) ->
 replace_parts_1([H | T]) ->
     R = replace_part(H),
     case T of
-        '_' -> '_';
-        "**" -> [R] ++ '_';
+        O when O == "**"; O == '_' -> '_';
         ["**"] -> [R] ++ '_'; %% [stat|'_']
         _ -> [R | replace_parts_1(T)]
     end;
@@ -343,8 +343,7 @@ replace_parts_1([]) ->
 
 replace_part(H) ->
     case H of
-        '_' -> '_';
-        "*" -> '_';
+        O when O == "*"; O == '_' -> '_';
         "'" ++ _ ->
             case erl_scan:string(H) of
                 {ok, [{atom, _, A}], _} ->
@@ -370,14 +369,13 @@ pads() -> [lists:duplicate(N, '_') || N <- lists:seq(1,10)].
 %% show is the generic base in which it was created
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(find_entries(sanitised_stat()|console_arg()) -> found_stats()).
+-spec(find_entries(sanitised_stat()|console_arg()) -> found_entries()).
 find_entries({Stat,Status,Type,DPs}) ->
     find_entries(Stat,Status,Type,DPs).
 find_entries(Stats,Status,Type,default) ->
     find_entries(Stats,Status,Type,[]);
 find_entries(Stats,Status,Type,DPs) ->
     stats:find_entries(Stats,Status,Type,DPs).
-
 
 %%%-----------------------------------------------------------------------------
 
@@ -433,7 +431,7 @@ print_response(String, Args) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% Profile Functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% @see stats_profiles.erl @doc
--spec(save_profile(stats_persist:profilename()) -> no_return()).
+-spec(save_profile(profile_name()) -> ok).
 save_profile(ProfileName) ->
     ConcatStrName = sanitise_profile_input(ProfileName),
     print_profile("Saved",
@@ -444,7 +442,7 @@ save_profile(ProfileName) ->
                 {False, ConcatStrName}
         end).
 
--spec(load_profile(stats_persist:profilename()) -> no_return()).
+-spec(load_profile(profile_name()) -> ok).
 load_profile(ProfileName) ->
     load_profile(ProfileName, [node()]).
 load_profile(ProfileName,Node) ->
@@ -457,24 +455,29 @@ load_profile(ProfileName,Node) ->
                 {False, ConcatStrName}
         end).
 
--spec(load_profile_all(stats_persist:profilename()) -> no_return()).
+-spec(load_profile_all(profile_name()) -> ok).
 load_profile_all(ProfileName) ->
     ConcatStrName = sanitise_profile_input(ProfileName),
     Nodes = [node()|nodes()],
     load_profile(ConcatStrName,Nodes).
 
--spec(get_profile(stats_persist:profile_name()) -> no_return()).
+-spec(get_profile(profile_name()) -> ok).
 get_profile(ProfileName) ->
     ConcatStrName = sanitise_profile_input(ProfileName),
     print_profile("Found",
         case profile_enabled() of
             true ->
-                stats_profiles:get_profile(ConcatStrName);
+                case stats_profiles:get_profile(ConcatStrName) of
+                    {error, Reason} ->
+                        {{error, Reason}, ConcatStrName};
+                    _ ->
+                        {ok, ConcatStrName}
+                end;
             False ->
                 {False, ConcatStrName}
         end).
 
--spec(get_all_profiles() -> no_return()).
+-spec(get_all_profiles() -> ok).
 get_all_profiles() ->
     print_profile("Found",
         case profile_enabled() of
@@ -485,7 +488,7 @@ get_all_profiles() ->
             {False, " "}
     end).
 
--spec(get_all_loaded_profiles() -> no_return()).
+-spec(get_all_loaded_profiles() -> ok).
 get_all_loaded_profiles() ->
     print_profile("Found",
         case profile_enabled() of
@@ -507,7 +510,7 @@ get_loaded_profile(Node) ->
                 {False, " "}
         end).
 
--spec(delete_profile(stats_persist:profilename()) -> no_return()).
+-spec(delete_profile(profile_name()) -> ok).
 delete_profile(ProfileName) ->
     ConcatStrName = sanitise_profile_input(ProfileName),
     print_profile("Deleted",
@@ -518,7 +521,7 @@ delete_profile(ProfileName) ->
     end).
 
 -spec(reset_profile() -> no_return()).
--spec(reset_profile([node()]) -> no_return()).
+-spec(reset_profile([node()]) -> ok).
 reset_profile() ->
     reset_profile([node()]).
 reset_profile(Nodes) ->
@@ -557,19 +560,19 @@ print_profile(Action,{{error,Reason},ProfileName}) ->
 %% @doc Setup a gen_server to push stats to an endpoint
 %% @see stats_push:maybe_start_server/2 @end
 %%%-----------------------------------------------------------------------------
--spec(setup(console_arg()) -> no_return()).
+-spec(setup(console_arg()) -> ok).
 setup(ListofArgs) ->
     {Protocol, Data} = sanitise_push_input(ListofArgs),
-    print_info(stats_push:maybe_start_server(Protocol, Data)).
+    stats_push:maybe_start_server(Protocol, Data).
 
 %%%-----------------------------------------------------------------------------
 %% @doc kill the gen_server that is pushing stats to an endpoint,
 %% @see stats_push:terminate_server/2 @end
 %%%-----------------------------------------------------------------------------
--spec(setdown(console_arg()) -> no_return()).
+-spec(setdown(console_arg()) -> ok).
 setdown(ListofArgs) ->
     {Protocol, Data} = sanitise_push_input(ListofArgs),
-    print_info(stats_push:terminate_server(Protocol, Data)).
+    stats_push:terminate_server(Protocol, Data).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -577,14 +580,14 @@ setdown(ListofArgs) ->
 %% up an endpoint, This is specific to the endpoint functions
 %% @end
 %%------------------------------------------------------------------------------
--spec(sanitise_push_input(console_arg()) -> {protocol(),sanitised_push()}).
+-spec(sanitise_push_input(console_arg()) -> ok | {protocol(),sanitised_push()}).
 sanitise_push_input(ListofArgs) ->
      case list_to_tuple(ListofArgs) of
          {HostPort, Protocol, Instance} ->
              sanitise_push(HostPort, Protocol, Instance, ['_']);
          {HostPort, Protocol, Instance, Stats} ->
              sanitise_push(HostPort, Protocol, Instance, Stats);
-         _ -> lager:error("Invalid number of Arguments")
+         _ -> lager:error("Invalid number of Arguments"), ok
      end.
 
 sanitise_push(HostPort, Protocol, Instance, Stats) ->
@@ -593,7 +596,7 @@ sanitise_push(HostPort, Protocol, Instance, Stats) ->
     ThePort = get_port(Port0),
     TheProtocol = list_to_atom(Protocol),
     TheInstance = Instance,
-    TheStats = sanitise_stat_input(Stats),
+    {TheStats,_,_,_} = sanitise_stat_input(Stats),
     {TheProtocol, {{ThePort,TheInstance,TheHost}, TheStats}}.
 
 get_host_port(HostPort) ->
@@ -605,8 +608,8 @@ get_host(Host) ->
         nomatch -> %% not ip address
             Hostname = Host,
             Hostname;
-        _ -> % It is an ip address
-            IpAddr = stats_push_util:ip_maker(Host),
+        IP -> % It is an ip address
+            IpAddr = inet:parse_ipv4_address(IP),
             IpAddr %% made into ipv4 address (tuple)
     end.
 
@@ -617,7 +620,7 @@ get_port(Port) -> list_to_integer(Port).
 %%%-----------------------------------------------------------------------------
 %% @doc find information about stats that are being pushed on all nodes @end
 %%%-----------------------------------------------------------------------------
--spec(find_push_stats_all(console_arg()) -> no_return()).
+-spec(find_push_stats_all(console_arg()) -> ok).
 find_push_stats_all(Arg) ->
     Sanitised = sanitise_push_input(Arg),
     print_info(stats_push:find_push_stats([node()|nodes()],Sanitised)).
@@ -625,7 +628,7 @@ find_push_stats_all(Arg) ->
 %%%-----------------------------------------------------------------------------
 %% @doc find information about stats that are being pushed on this node @end
 %%%-----------------------------------------------------------------------------
--spec(find_push_stats(console_arg()) -> no_return()).
+-spec(find_push_stats(console_arg()) -> ok).
 find_push_stats(Arg) ->
     Sanitised = sanitise_push_input(Arg),
     print_info(stats_push:find_push_stats([node()], Sanitised)).
@@ -634,10 +637,6 @@ find_push_stats(Arg) ->
 -spec(print_info(push_arg() | any()) -> ok).
 print_info([]) ->
     io:fwrite("Nothing found~n");
-print_info({error,badarg}) ->
-    io:fwrite("Invalid Argument Given~n");
-print_info({error,Reason}) ->
-    io:fwrite("Error: ~p~n",[Reason]);
 print_info(Info) ->
     String = "~10s ~8s ~-8s ~-15s ~-10s  ~-8s  ~-16s ~-16s ~-6s ~-8s ~s~n",
     ColumnArgs =
@@ -699,7 +698,7 @@ integers_to_strings(IntegerList) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Other Functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec(print(atom()|string()|list()|{found_stats(),any()}) -> term()).
+-spec(print(atom()|string()|list()|found_stats()|any()) -> term()).
 print(undefined)   -> print([]);
 print([undefined]) -> print([]);
 print({Stats,DPs}) -> print(Stats,DPs);

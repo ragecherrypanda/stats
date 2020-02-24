@@ -8,10 +8,10 @@
 -include("stats.hrl").
 
 %% API
--export([
-    register/1, get_stats/1, find_entries/2, stats/0, app_stats/1, get_value/1,
-    get_values/1, get_info/1, find_stats_info/2, update/3, unregister/1,
-    change_status/1, reset/1, alias/1, aliases_prefix_foldl/0, timestamp/0]).
+-export([register/1, get_stats/1, find_entries/2, find_entries/4, stats/0,
+         get_value/1, get_datapoint/2, get_values/1,
+         update/3, unregister/1, change_status/1, reset/1,
+         alias/1, aliases_prefix_foldl/0, timestamp/0]).
 
 -define(STAT_CACHE, cache_default).
 
@@ -30,13 +30,14 @@
 %%% Metadata does not persist the stats values.
 %%% @end
 %%%-----------------------------------------------------------------------------
--spec(register(metrics()) -> ok | no_return()).
+-spec(register(input_stats()) -> ok).
 register(Stats) ->
     lists:foreach(fun
         ({Name,Type})                -> register_(Name,Type,[],[]);
         ({Name,Type,Option})         -> register_(Name,Type,Option,[]);
         ({Name,Type,Option,Aliases}) -> register_(Name,Type,Option,Aliases)
-                  end, Stats).
+                  end, Stats),
+    ok.
 
 register_(Name, Type, Options, Aliases) ->
     NewOptions = add_cache(Options),
@@ -65,7 +66,8 @@ re_register(StatName, Type, Opts, Aliases) ->
     exometer:re_register(StatName, Type, Opts),
     lists:foreach(fun({DP,Alias}) ->
         exometer_alias:new(Alias,StatName,DP)
-                  end, Aliases).
+                  end, Aliases),
+    ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% NB : DP = DataPoint
@@ -78,9 +80,10 @@ re_register(StatName, Type, Opts, Aliases) ->
 %% stats' as : [{Name, Type, Status}]
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(get_stats([[atom()|[any()]]]) -> {found_stats(), list()}).
+-spec(get_stats(stat_path()) -> found_entries()).
 get_stats(Path) ->
-    find_entries(Path, '_').
+    {FoundStats,DataPoints} = find_entries(Path, '_'),
+    {FoundStats,DataPoints}.
 
 find_entries(Stats, Status) ->
     find_entries(Stats, Status, '_', []).
@@ -94,7 +97,7 @@ find_entries(Stats, Status) ->
 %%% find it.
 %%% @end
 %%%-----------------------------------------------------------------------------
--spec(find_entries(metrics(),status(),type(),[atom()|integer()])->found_stats()).
+-spec(find_entries(stat_path(),status(),type(),datapoints()) -> found_entries()).
 find_entries(Stats, Status, Type, DPs) ->
     %% check in legacy search first, as it takes less time to perform
     case legacy_search(Stats, Status, Type) of
@@ -146,7 +149,7 @@ try_find_in_meta(Stats, Status, Type, DPs) ->
 %%% and its value.
 %%% @end
 %%%-----------------------------------------------------------------------------
--spec(legacy_search(metrics(), status(), type()) -> found_stats()).
+-spec(legacy_search(stat_path(),status(),type()) -> found_stats()|legacy_stat()).
 legacy_search(Stats, Status, Type) ->
     lists:flatten(
         lists:map(fun(Stat) ->
@@ -213,7 +216,6 @@ legacy_search_cont(Re, Status, Type) ->
             end
         end, [], orddict:to_list(Found)).
 
-
 aliases_regexp_foldr([N]) ->
     exometer_alias:regexp_foldr(N,alias_fun(),orddict:new()).
 
@@ -222,10 +224,10 @@ alias_fun() ->
         orddict:append(Entry, {DP, Alias}, Acc)
     end.
 
-match_type(_, '_') ->
+match_type(_Name, Type) when Type == '_' ->
     true;
-match_type(Name, T) ->
-    T == exometer:info(Name, type).
+match_type(Name, Type) ->
+    Type == exometer:info(Name, type).
 
 get_datapoint(Entry, DPs) ->
     case exometer:get_value(Entry, DPs) of
@@ -244,7 +246,7 @@ zip_disabled(DPs) -> [{D, disabled, N} || {D, N} <- DPs].
 %%%-----------------------------------------------------------------------------
 %% @doc Use the alias of the stat to find it's datapoint @end
 %%%-----------------------------------------------------------------------------
--spec(find_through_alias(metrics()) -> [] | {alias(), list()}).
+-spec(find_through_alias([alias()]) -> [] | {alias(), datapoints()}).
 find_through_alias([Alias]) when is_atom(Alias)->
     case exometer_alias:resolve(Alias) of
         error -> [];
@@ -255,14 +257,8 @@ find_through_alias(_Aliases) -> [].
 %%%-----------------------------------------------------------------------------
 %% @doc Print all the stats for the app stored in exometer/metadata @end
 %%%-----------------------------------------------------------------------------
--spec(stats() -> no_return()).
+-spec(stats() -> found_entries()).
 stats() -> get_stats([['_']]).
-
-%%%-----------------------------------------------------------------------------
-%% @doc Print all the stats for an app stored in exometer/metadata @end
-%%%-----------------------------------------------------------------------------
--spec(app_stats(app()) -> no_return()).
-app_stats(App) -> get_stats([[App]++'_']).
 
 %%%-----------------------------------------------------------------------------
 %% @doc
@@ -271,39 +267,13 @@ app_stats(App) -> get_stats([[App]++'_']).
 %% path. and uses exometer:find_entries
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(get_values(any()) -> no_return()).
+-spec(get_values(stat_path()) -> found_values()).
 get_values(Arg) -> exometer:get_values(Arg).
 
 get_value(Name) -> exometer:get_value(Name).
 
-%%%-----------------------------------------------------------------------------
-%% @doc Get the info of the stat/app-stats from exometer (enabled only) @end
-%%%-----------------------------------------------------------------------------
--spec(get_info(app() | metrics()) -> no_return()).
-get_info(Arg) when is_atom(Arg) ->
-    get_info([Arg]++'_'); %% assumed arg is the app (atom)
-get_info(Arg) ->
-    {Stats, _DataPoints} = get_stats([Arg]),
-    print([{Stat, stat_info(Stat)} || {Stat,_Type,_Status} <- Stats]).
-
-stat_info(Stat) -> exometer:info(Stat, ?INFO_STAT).
 
 %%%=============================================================================
-
--spec(find_stats_info(metricname(), [atom()|integer()]) -> found_stats()).
-find_stats_info(Stats, Info) when is_atom(Info) ->
-    find_stats_info(Stats, [Info]);
-find_stats_info(Stat, Info) when is_list(Info) ->
-    lists:foldl(fun(DP, Acc) ->
-        case get_datapoint(Stat, DP) of
-            {ok, [{DP, _Error}]} ->
-                Acc;
-            {ok, Value} ->
-                [{DP, Value} | Acc];
-            _ -> Acc
-        end
-                end, [], Info).
-
 %%%-----------------------------------------------------------------------------
 %% @doc
 %% For updating the stats, each of the stats module will call into this module
@@ -315,7 +285,8 @@ find_stats_info(Stat, Info) when is_list(Info) ->
 %% removed from the stats code, otherwise it is to be disabled.
 %% @end
 %%%-----------------------------------------------------------------------------
--spec(update(metricname(), incrvalue(), type()) -> ok).
+-type incr_value() :: pos_integer() | float().
+-spec(update(stat_name(), incr_value(), type()) -> ok).
 update(Name, Val, Type) ->
     update(Name, Val, Type, []).
 update(Name, Val, Type, Opts) ->
@@ -326,7 +297,7 @@ update(Name, Val, Type, Opts) ->
 %%%-----------------------------------------------------------------------------
 %% @doc unregister a stat in metadata, and deletes the metric from exometer @end
 %%%-----------------------------------------------------------------------------
--spec(unregister(metricname()) -> ok | no_return()).
+-spec(unregister(stat_name()) -> ok).
 unregister([Stats|Name]) when is_atom(Stats) ->
     unregister_stat([Stats|Name]);
 unregister(Stats) -> %% generic
@@ -345,7 +316,8 @@ unregister_stat(StatName) ->
 %%%-----------------------------------------------------------------------------
 %% @doc change status in metadata (if enabled) and then in exometer. @end
 %%%-----------------------------------------------------------------------------
--spec(change_status([{metricname(),status()}]) -> no_return()).
+-type stats_status_list()   :: [{stat_name(), status()}] | [].
+-spec(change_status(stats_status_list()) -> ok).
 change_status([]) -> io:format("No stats need changing~n");
 change_status(StatsList) ->
     case stats_persist:enabled() of
@@ -362,7 +334,7 @@ change_mem_status(Stats) ->
         [{Stat,Status}|Acc]
                 end, [], Stats).
 
--spec(reset(metricname()) -> ok).
+-spec(reset(stat_name()) -> ok).
 reset(Stat) -> exometer:reset(Stat).
 
 aliases_prefix_foldl() ->
@@ -392,13 +364,10 @@ alias(Group) ->
 %%% Internal API
 %%%=============================================================================
 
--spec(print(Entries :: any()) -> no_return()).
-print(Entries) -> stats_console:print(Entries).
-
 %%%-----------------------------------------------------------------------------
 %% @doc Returns the timestamp to put in the stat entry  @end
 %%%-----------------------------------------------------------------------------
--spec(timestamp() -> term()).
+-spec(timestamp() -> exometer_util:timestamp()).
 timestamp() ->
     exometer_util:timestamp().
 

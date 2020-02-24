@@ -16,11 +16,11 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {socket        :: socket(),
-                port          :: port(),
-                host          :: host(),
-                instance      :: instance(),
-                stats         :: found_stats()}).
+-record(state, {socket    ,
+                port      ,
+                host      ,
+                instance  ,
+                stats     }).
 
 -define(PROTOCOL, tcp).
 
@@ -135,7 +135,6 @@ terminate_server(Instance) ->
 
 %%------------------------------------------------------------------------------
 
--spec(send(socket(),list()) -> no_return()).
 send(Socket, Data) -> gen_tcp:send(Socket, Data).
 
 send_after(Interval, Arg) -> erlang:send_after(Interval,self(),Arg).
@@ -146,7 +145,6 @@ send_after(Interval, Arg) -> erlang:send_after(Interval,self(),Arg).
 %% send to the endpoint. Repeat.
 %% @end
 %%------------------------------------------------------------------------------
--spec(push_stats(socket(),term()) -> no_return()).
 push_stats(Socket, Stats) ->
     JsonStats = stats_push_util:json_stats(Stats),
     send(Socket, JsonStats).
