@@ -32,6 +32,7 @@
 %%%-----------------------------------------------------------------------------
 -spec(register(input_stats()) -> ok).
 register(Stats) ->
+    io:format("Register: ~p", [length(Stats)]),
     lists:foreach(fun
         ({Name,Type})                -> register_(Name,Type,[],[]);
         ({Name,Type,Option})         -> register_(Name,Type,Option,[]);
